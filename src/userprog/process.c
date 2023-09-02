@@ -58,7 +58,7 @@ start_process (void *file_name_)
   if_.gs = if_.fs = if_.es = if_.ds = if_.ss = SEL_UDSEG;
   if_.cs = SEL_UCSEG;
   if_.eflags = FLAG_IF | FLAG_MBS;
-  success = load (file_name, &if_.eip, &if_.esp);
+  success = load(file_name, &if_.eip, &if_.esp);
 
   /* If load failed, quit. */
   palloc_free_page (file_name);
@@ -215,6 +215,25 @@ load (const char *file_name, void (**eip) (void), void **esp)
   bool success = false;
   int i;
 
+  // TODO parse file_name to argv
+  char **argv;
+  int argc = 0;
+  char *cur_word, *next_word;
+  cur_word = strtok_r(file_name, " ", &next_word);
+  if (cur_word)
+  {
+    argv = (char **)malloc(sizeof(char *));
+    argv[argc++] = cur_word;
+    cur_word = strtok_r(NULL, " ", &next_word);
+    while (cur_word)
+    {
+      argv = (char **)realloc(argv, sizeof(char *) * (argc + 1));
+      argv[argc++] = cur_word;
+      cur_word = strtok_r(NULL, " ", &next_word);
+    }
+  }
+  
+
   /* Allocate and activate page directory. */
   t->pagedir = pagedir_create ();
   if (t->pagedir == NULL) 
@@ -222,7 +241,7 @@ load (const char *file_name, void (**eip) (void), void **esp)
   process_activate ();
 
   /* Open executable file. */
-  file = filesys_open (file_name);
+  file = filesys_open(argv[0]);
   if (file == NULL) 
     {
       printf ("load: %s: open failed\n", file_name);
@@ -305,9 +324,55 @@ load (const char *file_name, void (**eip) (void), void **esp)
   if (!setup_stack (esp))
     goto done;
 
-  //TODO parse file_name ex) "echo x" to esp
+  //TODO stack argv to esp
+  int data_size = 0;
+  char **argv_addr = (char **)malloc(sizeof(char *) * argc);
+  int total_data_size = 0;
+  int word_align = 0;
+  for (i = argc - 1; i > 0; i--)
+  {
+    //stack each argv to esp reverse
+    data_size = strlen(argv[i]) + 1;
+    total_data_size += data_size;
+    *esp -= data_size;
+    memcpy(*esp, argv[i], data_size);
+    argv_addr[i] = *esp;
+  }
+
+  //move esp to fit word align
+  if(total_data_size| 0b11){
+    // if word_align not fit
+    word_align = 4 - total_data_size | 0b11;
+  }
+  *esp -= word_align;
+
+  //stack null
+  *esp -= 4;
+  **(char **)esp = 0;
+
+  //stack argv elements addr
+  for (i = argc - 1; i > 0; i--)
+  {
+    *esp -= 4;
+    **(char **)esp = argv_addr[i];
+  }
+  //stack argv addr
+  *esp -= 4;
+  **(char **)esp = *esp + 4;
+
+  //stack argc
+  *esp -= 4;
+  **(int **)esp = argc;
+
+  //stack return address
+  *esp -= 4;
+  **(int **)esp = 0;
+
+  free(argv);
+  free(argv_addr);
+  
   /* Start address. */
-  *eip = (void (*) (void)) ehdr.e_entry;
+  *eip = (void (*)(void))ehdr.e_entry;
 
   success = true;
 
