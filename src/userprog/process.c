@@ -87,6 +87,10 @@ start_process (void *file_name_)
 int
 process_wait (tid_t child_tid UNUSED) 
 {
+  int d = 1000000000;
+  while(d--){
+
+  }
   return -1;
 }
 
@@ -207,7 +211,7 @@ static bool load_segment (struct file *file, off_t ofs, uint8_t *upage,
 bool
 load (const char *file_name, void (**eip) (void), void **esp) 
 {
-  ASSERT(false);
+  //ASSERT(false);
   struct thread *t = thread_current();
   struct Elf32_Ehdr ehdr;
   struct file *file = NULL;
@@ -329,7 +333,7 @@ load (const char *file_name, void (**eip) (void), void **esp)
   char **argv_addr = (char **)malloc(sizeof(char *) * argc);
   int total_data_size = 0;
   int word_align = 0;
-  for (i = argc - 1; i > 0; i--)
+  for (i = argc - 1; i >= 0; i--)
   {
     //stack each argv to esp reverse
     data_size = strlen(argv[i]) + 1;
@@ -340,34 +344,34 @@ load (const char *file_name, void (**eip) (void), void **esp)
   }
 
   //move esp to fit word align
-  if(total_data_size| 0b11){
+  if(total_data_size%4){
     // if word_align not fit
-    word_align = 4 - total_data_size | 0b11;
+    word_align = 4 - total_data_size %4;
   }
   *esp -= word_align;
 
   //stack null
   *esp -= 4;
-  **(char **)esp = 0;
+  **(uint32_t **)esp = 0;
 
   //stack argv elements addr
-  for (i = argc - 1; i > 0; i--)
+  for (i = argc - 1; i >= 0; i--)
   {
     *esp -= 4;
-    **(char **)esp = argv_addr[i];
+    **(uint32_t **)esp = argv_addr[i];
   }
   //stack argv addr
   *esp -= 4;
-  **(char **)esp = *esp + 4;
+  **(uint32_t **)esp = *esp + 4;
 
   //stack argc
   *esp -= 4;
-  **(int **)esp = argc;
+  **(uint32_t **)esp = argc;
 
   //stack return address
   *esp -= 4;
-  **(int **)esp = 0;
-
+  **(uint32_t **)esp = 0;
+  //hex_dump(*esp, *esp, 100, 1);
   free(argv);
   free(argv_addr);
   
