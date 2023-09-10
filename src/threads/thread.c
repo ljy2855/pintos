@@ -182,7 +182,7 @@ thread_create (const char *name, int priority,
   /* Initialize thread. */
   init_thread (t, name, priority);
   tid = t->tid = allocate_tid ();
-
+  
   /* Stack frame for kernel_thread(). */
   kf = alloc_frame (t, sizeof *kf);
   kf->eip = NULL;
@@ -197,7 +197,7 @@ thread_create (const char *name, int priority,
   sf = alloc_frame (t, sizeof *sf);
   sf->eip = switch_entry;
   sf->ebp = 0;
-
+  
   /* Add to run queue. */
   thread_unblock (t);
 
@@ -464,9 +464,21 @@ init_thread (struct thread *t, const char *name, int priority)
   t->priority = priority;
   t->magic = THREAD_MAGIC;
 
+  
+  /* USERPROG process lock Implement*/
+  #ifdef USERPROG
+    list_init(&t->child_thread);
+    sema_init(&t->wait_lock,0);
+    //lock_acquire(&t->wait_lock);
+
+    list_push_back(&running_thread()->child_thread,&t->child_thread_elem);
+    t->parent_thread = running_thread();
+  #endif
+
   old_level = intr_disable ();
   list_push_back (&all_list, &t->allelem);
   intr_set_level (old_level);
+
 }
 
 /* Allocates a SIZE-byte frame at the top of thread T's stack and

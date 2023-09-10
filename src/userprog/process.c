@@ -20,6 +20,7 @@
 
 static thread_func start_process NO_RETURN;
 static bool load (const char *cmdline, void (**eip) (void), void **esp);
+struct thread * get_child(tid_t);
 
 /* Starts a new thread running a user program loaded from
    FILENAME.  The new thread may be scheduled (and may even exit)
@@ -28,7 +29,7 @@ static bool load (const char *cmdline, void (**eip) (void), void **esp);
 tid_t
 process_execute (const char *file_name) 
 {
-  char *fn_copy;
+  char *fn_copy,*name,*temp;
   tid_t tid;
 
   /* Make a copy of FILE_NAME.
@@ -38,7 +39,8 @@ process_execute (const char *file_name)
     return TID_ERROR;
   strlcpy (fn_copy, file_name, PGSIZE);
   /* Create a new thread to execute FILE_NAME. */
-  tid = thread_create (file_name, PRI_DEFAULT, start_process, fn_copy);
+  name = strtok_r(file_name," ",&temp);
+  tid = thread_create (name, PRI_DEFAULT, start_process, fn_copy);
   if (tid == TID_ERROR)
     palloc_free_page (fn_copy); 
   return tid;
@@ -52,7 +54,6 @@ start_process (void *file_name_)
   char *file_name = file_name_;
   struct intr_frame if_;
   bool success;
-
   /* Initialize interrupt frame and load executable. */
   memset (&if_, 0, sizeof if_);
   if_.gs = if_.fs = if_.es = if_.ds = if_.ss = SEL_UDSEG;
@@ -75,6 +76,20 @@ start_process (void *file_name_)
   NOT_REACHED ();
 }
 
+struct thread * get_child(tid_t child_tid){
+  struct thread * cur_thread = thread_current();
+  struct list_elem * node = list_begin(&cur_thread->child_thread);
+  struct thread *t;
+  while(node != list_end(&cur_thread->child_thread)){
+    t = list_entry(node,struct thread,child_thread_elem);
+    //printf("child tid : %d\n",t->tid);
+    if(t->tid == child_tid)
+      return t;
+    node = node->next;
+  }
+  return NULL;
+}
+
 /* Waits for thread TID to die and returns its exit status.  If
    it was terminated by the kernel (i.e. killed due to an
    exception), returns -1.  If TID is invalid or if it was not a
@@ -87,10 +102,14 @@ start_process (void *file_name_)
 int
 process_wait (tid_t child_tid UNUSED) 
 {
-  int d = 1000000000;
-  while(d--){
 
+  struct thread * child_thread = get_child(child_tid);
+  if(child_thread != NULL){
+    sema_down(&child_thread->wait_lock);
+    return child_thread->exit_num;
+    
   }
+
   return -1;
 }
 
@@ -117,7 +136,10 @@ process_exit (void)
       pagedir_activate (NULL);
       pagedir_destroy (pd);
     }
+  sema_up(&cur->wait_lock);
+
 }
+
 
 /* Sets up the CPU for running user code in the current
    thread.
