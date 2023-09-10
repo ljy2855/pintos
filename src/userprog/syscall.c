@@ -70,6 +70,7 @@ syscall_handler (struct intr_frame *f UNUSED)
      * esp[1] = status
     */
     check_valid_address(f->esp);
+    check_valid_address(((uint32_t *)f->esp + 1)); // Check sc-bad-sp
     exit(*((uint32_t *)f->esp + 1));
     break;
   case SYS_WAIT:
@@ -79,14 +80,16 @@ syscall_handler (struct intr_frame *f UNUSED)
     */
     check_valid_address(f->esp);
     wait(*((uint32_t *)f->esp + 1));
-
+    break;
   case SYS_EXEC:
     /**
      * esp[0] = system call number
      * esp[1] = cmd_line
     */
     check_valid_address(f->esp);
+    check_valid_address(((uint32_t *)f->esp + 1)); 
     f->eax = exec(*((uint32_t *)f->esp + 1));
+    break;
   case SYS_READ:
     /**
      * esp[0] = system call number
@@ -96,6 +99,7 @@ syscall_handler (struct intr_frame *f UNUSED)
     */
     check_valid_address(f->esp);
     f->eax = read(*((uint32_t*)f->esp+1),*((uint32_t*)f->esp+2),*((uint32_t*)f->esp+3));
+    break;
   default:
     break;
   }

@@ -38,11 +38,23 @@ process_execute (const char *file_name)
   if (fn_copy == NULL)
     return TID_ERROR;
   strlcpy (fn_copy, file_name, PGSIZE);
+
+  name = palloc_get_page(0);
+  if(name == NULL)
+    return TID_ERROR;
+  for(int i = 0 ; i <= strlen(file_name) ; i++){
+    if(file_name[i] == '\0' || file_name[i] == ' '){
+      name[i] = '\0';
+      break;
+    }
+    name[i] = file_name[i];
+  }
+
   /* Create a new thread to execute FILE_NAME. */
-  name = strtok_r(file_name," ",&temp);
   tid = thread_create (name, PRI_DEFAULT, start_process, fn_copy);
   if (tid == TID_ERROR)
     palloc_free_page (fn_copy); 
+    palloc_free_page (name); 
   return tid;
 }
 
@@ -106,6 +118,7 @@ process_wait (tid_t child_tid UNUSED)
   struct thread * child_thread = get_child(child_tid);
   if(child_thread != NULL){
     sema_down(&child_thread->wait_lock);
+    //list_remove(&child_thread->child_thread_elem);
     return child_thread->exit_num;
     
   }
