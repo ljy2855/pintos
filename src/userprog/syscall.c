@@ -12,7 +12,6 @@
 static void syscall_handler (struct intr_frame *);
 void check_valid_address(void * addr);
 
-void exit (int status);
 void halt (void);
 tid_t exec (const char *cmd_line);
 int wait (tid_t pid);
@@ -28,8 +27,8 @@ int write (int fd, const void *buffer, unsigned size);
 //void close (int fd);
 
 void check_valid_address(void * addr){
-  struct thread * current_thread = thread_current();
-  if (!is_user_vaddr(addr) || addr == NULL ){
+ 
+  if (!is_user_vaddr(addr) || addr == NULL){
     exit(-1);
   }
 }
@@ -121,7 +120,14 @@ void exit (int status){
   thread_exit();
 }
 tid_t exec (const char *cmd_line){
-  return process_execute(cmd_line);
+  tid_t tid = process_execute(cmd_line);
+  struct thread * child_thread = get_child(tid);
+  bool success;
+  sema_down(&child_thread->load_lock);
+  success = child_thread->load_success;
+  if(!success)
+    return -1;
+  return tid;
 }
 int wait (tid_t pid){
   return process_wait(pid);

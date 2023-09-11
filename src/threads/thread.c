@@ -470,6 +470,8 @@ init_thread (struct thread *t, const char *name, int priority)
     list_init(&t->child_thread);
     sema_init(&t->wait_lock,0);
     sema_init(&t->memory_lock,0);
+    sema_init(&t->load_lock,0);
+    t->load_success = false;
 
     list_push_back(&running_thread()->child_thread,&t->child_thread_elem);
     t->parent_thread = running_thread();
