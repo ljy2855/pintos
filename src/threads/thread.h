@@ -100,6 +100,7 @@ struct thread
     /* Owned by userprog/process.c. */
     uint32_t *pagedir;                  /* Page directory. */
     struct semaphore wait_lock;              /* Process wait lock*/
+    struct semaphore memory_lock;
     struct list child_thread;
     struct list_elem child_thread_elem;
     struct thread * parent_thread;

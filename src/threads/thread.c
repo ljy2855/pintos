@@ -469,7 +469,7 @@ init_thread (struct thread *t, const char *name, int priority)
   #ifdef USERPROG
     list_init(&t->child_thread);
     sema_init(&t->wait_lock,0);
-    //lock_acquire(&t->wait_lock);
+    sema_init(&t->memory_lock,0);
 
     list_push_back(&running_thread()->child_thread,&t->child_thread_elem);
     t->parent_thread = running_thread();

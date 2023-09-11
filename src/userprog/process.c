@@ -94,7 +94,6 @@ struct thread * get_child(tid_t child_tid){
   struct thread *t;
   while(node != list_end(&cur_thread->child_thread)){
     t = list_entry(node,struct thread,child_thread_elem);
-    //printf("child tid : %d\n",t->tid);
     if(t->tid == child_tid)
       return t;
     node = node->next;
@@ -114,12 +113,16 @@ struct thread * get_child(tid_t child_tid){
 int
 process_wait (tid_t child_tid UNUSED) 
 {
-
+  int status;
   struct thread * child_thread = get_child(child_tid);
   if(child_thread != NULL){
     sema_down(&child_thread->wait_lock);
-    //list_remove(&child_thread->child_thread_elem);
-    return child_thread->exit_num;
+    status = child_thread->exit_num;
+    list_remove(&child_thread->child_thread_elem);
+    sema_up(&child_thread->memory_lock);
+    
+    //sema_up(&child_thread->wait_lock);
+    return status;
     
   }
 
@@ -149,7 +152,9 @@ process_exit (void)
       pagedir_activate (NULL);
       pagedir_destroy (pd);
     }
+  
   sema_up(&cur->wait_lock);
+  sema_down(&cur->memory_lock);
 
 }
 

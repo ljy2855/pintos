@@ -6,6 +6,7 @@
 #include "threads/vaddr.h"
 #include "devices/shutdown.h"
 #include "process.h"
+#include "pagedir.h"
 #define STDOUT 1
 #define STDIN 0
 static void syscall_handler (struct intr_frame *);
@@ -27,7 +28,8 @@ int write (int fd, const void *buffer, unsigned size);
 //void close (int fd);
 
 void check_valid_address(void * addr){
-  if (!is_user_vaddr(addr)){
+  struct thread * current_thread = thread_current();
+  if (!is_user_vaddr(addr) || addr == NULL ){
     exit(-1);
   }
 }
@@ -79,7 +81,8 @@ syscall_handler (struct intr_frame *f UNUSED)
      * esp[1] = wait pid
     */
     check_valid_address(f->esp);
-    wait(*((uint32_t *)f->esp + 1));
+    check_valid_address(((uint32_t *)f->esp + 1));
+    f->eax = wait(*((uint32_t *)f->esp + 1));
     break;
   case SYS_EXEC:
     /**
