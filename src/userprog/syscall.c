@@ -17,6 +17,8 @@ tid_t exec (const char *cmd_line);
 int wait (tid_t pid);
 int read (int fd, void *buffer, unsigned size);
 int write (int fd, const void *buffer, unsigned size);
+int fibonacci(int n);
+int max_of_four_int(int a,int b,int c,int d);
 
 //bool create (const char *file, unsigned initial_size);
 //bool remove (const char *file);
@@ -108,6 +110,31 @@ syscall_handler (struct intr_frame *f UNUSED)
     check_valid_address(((uint32_t*)f->esp+3));
     f->eax = read(*((uint32_t*)f->esp+1),*((uint32_t*)f->esp+2),*((uint32_t*)f->esp+3));
     break;
+  case SYS_FIBO:
+    /**
+     * esp[0] = system call number
+     * esp[1] = n
+    */
+    check_valid_address(f->esp);
+    check_valid_address(((uint32_t*)f->esp+1));
+    f->eax = fibonacci(*((uint32_t *)f->esp + 1));
+    break;
+
+  case SYS_MAX_FOUR:
+    /**
+     * esp[0] = system call number
+     * esp[1] = a
+     * esp[2] = b
+     * esp[3] = c
+     * esp[4] = d
+    */
+    check_valid_address(f->esp);
+    check_valid_address(((uint32_t*)f->esp+1));
+    check_valid_address(((uint32_t*)f->esp+2));
+    check_valid_address(((uint32_t*)f->esp+3));
+    check_valid_address(((uint32_t*)f->esp+4));
+    f->eax = max_of_four_int(*((uint32_t*)f->esp+1),*((uint32_t*)f->esp+2),*((uint32_t*)f->esp+3),*((uint32_t*)f->esp+4));
+    break;
   default:
     break;
   }
@@ -156,4 +183,26 @@ int read (int fd, void *buffer, unsigned size){
     return i;
   }
   return -1;
+}
+
+int fibonacci(int n){
+  if(n == 0)
+    return 0;
+  if(n == 1)
+    return 1;
+  if(n  == 2)
+    return 1;
+  
+  return fibonacci(n-1) + fibonacci(n-2);
+}
+int max_of_four_int(int a,int b,int c,int d){
+  int max = a;
+
+  if(max < b)
+    max = b;
+  if(max < c)
+    max = c;
+  if(max < d)
+    max = d;
+  return max;
 }
