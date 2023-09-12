@@ -62,6 +62,9 @@ syscall_handler (struct intr_frame *f UNUSED)
     */
     
     check_valid_address(f->esp);
+    check_valid_address(((uint32_t*)f->esp+1));
+    check_valid_address(((uint32_t*)f->esp+2));
+    check_valid_address(((uint32_t*)f->esp+3));
     f->eax = write(*((uint32_t*)f->esp+1),*((uint32_t*)f->esp+2),*((uint32_t*)f->esp+3));
     break;
   case SYS_EXIT:
@@ -100,6 +103,9 @@ syscall_handler (struct intr_frame *f UNUSED)
      * esp[3] = size
     */
     check_valid_address(f->esp);
+    check_valid_address(((uint32_t*)f->esp+1));
+    check_valid_address(((uint32_t*)f->esp+2));
+    check_valid_address(((uint32_t*)f->esp+3));
     f->eax = read(*((uint32_t*)f->esp+1),*((uint32_t*)f->esp+2),*((uint32_t*)f->esp+3));
     break;
   default:
