@@ -28,12 +28,23 @@ int max_of_four_int(int a,int b,int c,int d);
 //unsigned tell (int fd);
 //void close (int fd);
 
+bool check_unmapped_address(void * addr){
+  struct thread * t = thread_current();
+  void * pte = pagedir_get_page(t->pagedir,addr);
+  if(pte == NULL)
+    return false;
+  return true;
+}
+
+
 void check_valid_address(void * addr){
- 
-  if (!is_user_vaddr(addr) || addr == NULL){
+  if (!is_user_vaddr(addr) || addr == NULL || addr <= 0x4000 || !check_unmapped_address(addr)){
     exit(-1);
   }
+ 
 }
+
+
 
 void
 syscall_init (void) 
@@ -44,7 +55,9 @@ syscall_init (void)
 static void
 syscall_handler (struct intr_frame *f UNUSED) 
 {
+  check_valid_address(f->esp);
   int call_number =  *(int*)f->esp;
+  
   switch (call_number)
   {
   case SYS_HALT:
@@ -63,9 +76,7 @@ syscall_handler (struct intr_frame *f UNUSED)
      * esp[3] = size
     */
     
-    check_valid_address(f->esp);
-    check_valid_address(((uint32_t*)f->esp+1));
-    check_valid_address(((uint32_t*)f->esp+2));
+    
     check_valid_address(((uint32_t*)f->esp+3));
     f->eax = write(*((uint32_t*)f->esp+1),*((uint32_t*)f->esp+2),*((uint32_t*)f->esp+3));
     break;
@@ -75,7 +86,7 @@ syscall_handler (struct intr_frame *f UNUSED)
      * esp[0] = system call number
      * esp[1] = status
     */
-    check_valid_address(f->esp);
+ 
     check_valid_address(((uint32_t *)f->esp + 1)); // Check sc-bad-sp
     exit(*((uint32_t *)f->esp + 1));
     break;
@@ -84,7 +95,7 @@ syscall_handler (struct intr_frame *f UNUSED)
      * esp[0] = system call number
      * esp[1] = wait pid
     */
-    check_valid_address(f->esp);
+ 
     check_valid_address(((uint32_t *)f->esp + 1));
     f->eax = wait(*((uint32_t *)f->esp + 1));
     break;
@@ -93,7 +104,7 @@ syscall_handler (struct intr_frame *f UNUSED)
      * esp[0] = system call number
      * esp[1] = cmd_line
     */
-    check_valid_address(f->esp);
+ 
     check_valid_address(((uint32_t *)f->esp + 1)); 
     f->eax = exec(*((uint32_t *)f->esp + 1));
     break;
@@ -104,9 +115,8 @@ syscall_handler (struct intr_frame *f UNUSED)
      * esp[2] = buffer
      * esp[3] = size
     */
-    check_valid_address(f->esp);
-    check_valid_address(((uint32_t*)f->esp+1));
-    check_valid_address(((uint32_t*)f->esp+2));
+
+
     check_valid_address(((uint32_t*)f->esp+3));
     f->eax = read(*((uint32_t*)f->esp+1),*((uint32_t*)f->esp+2),*((uint32_t*)f->esp+3));
     break;
@@ -115,7 +125,7 @@ syscall_handler (struct intr_frame *f UNUSED)
      * esp[0] = system call number
      * esp[1] = n
     */
-    check_valid_address(f->esp);
+
     check_valid_address(((uint32_t*)f->esp+1));
     f->eax = fibonacci(*((uint32_t *)f->esp + 1));
     break;
@@ -128,10 +138,8 @@ syscall_handler (struct intr_frame *f UNUSED)
      * esp[3] = c
      * esp[4] = d
     */
-    check_valid_address(f->esp);
-    check_valid_address(((uint32_t*)f->esp+1));
-    check_valid_address(((uint32_t*)f->esp+2));
-    check_valid_address(((uint32_t*)f->esp+3));
+
+
     check_valid_address(((uint32_t*)f->esp+4));
     f->eax = max_of_four_int(*((uint32_t*)f->esp+1),*((uint32_t*)f->esp+2),*((uint32_t*)f->esp+3),*((uint32_t*)f->esp+4));
     break;
@@ -153,6 +161,9 @@ void exit (int status){
   thread_exit();
 }
 tid_t exec (const char *cmd_line){
+  if(!check_unmapped_address(cmd_line))
+    return -1;
+
   tid_t tid = process_execute(cmd_line);
   struct thread * child_thread = get_child(tid);
   bool success;
@@ -168,6 +179,8 @@ int wait (tid_t pid){
 
 int write (int fd, const void *buffer, unsigned size){
   //printf("%d %s %d\n",fd,buffer,size);
+  if(!check_unmapped_address(buffer))
+    return -1;
   if(fd == STDOUT){
     //if write stdout
     putbuf(buffer,size);
@@ -177,9 +190,11 @@ int write (int fd, const void *buffer, unsigned size){
 }
 int read (int fd, void *buffer, unsigned size){
   unsigned int i;
+  if(!check_unmapped_address(buffer))
+    return -1;
   if(fd == STDIN){
     for(i = 0; i < size ; i++)
-      *((uint8_t*)buffer+1) = (uint8_t)input_getc();
+      *((uint8_t*)buffer+i) = (uint8_t)input_getc();
     return i;
   }
   return -1;
