@@ -200,6 +200,9 @@ thread_create (const char *name, int priority,
   
   /* Add to run queue. */
   thread_unblock (t);
+  #ifdef USERPROG
+    t->fd_table = palloc_get_page(PAL_ZERO);
+  #endif
 
   return tid;
 }
@@ -472,8 +475,8 @@ init_thread (struct thread *t, const char *name, int priority)
     sema_init(&t->memory_lock,0);
     sema_init(&t->load_lock,0);
     t->load_success = false;
-
-    list_push_back(&running_thread()->child_thread,&t->child_thread_elem);
+    t->next_fd = 2;
+    list_push_back(&running_thread()->child_thread, &t->child_thread_elem);
     t->parent_thread = running_thread();
   #endif
 

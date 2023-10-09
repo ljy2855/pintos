@@ -18,6 +18,7 @@
 #include "threads/thread.h"
 #include "threads/vaddr.h"
 
+
 static thread_func start_process NO_RETURN;
 static bool load (const char *cmdline, void (**eip) (void), void **esp);
 
@@ -136,12 +137,21 @@ process_exit (void)
 {
   struct thread *cur = thread_current ();
   uint32_t *pd;
+  struct file *f;
 
   /* Destroy the current process's page directory and switch back
      to the kernel-only page directory. */
   pd = cur->pagedir;
   if (pd != NULL) 
     {
+      for (uint8_t i = 2; i < MAX_FD; i++){
+        f = (struct file *)*((struct file **)cur->fd_table+i);
+        if (f != NULL)
+        {
+          file_close(f);
+        }
+      }
+      palloc_free_page(cur->fd_table);
       /* Correct ordering here is crucial.  We must set
          cur->pagedir to NULL before switching page directories,
          so that a timer interrupt can't switch back to the
@@ -426,7 +436,28 @@ load (const char *file_name, void (**eip) (void), void **esp)
   file_close (file);
   return success;
 }
-
+
+struct file *get_file(int fd){
+  struct thread *t = thread_current();
+
+  return t->fd_table[fd];
+}
+int insert_fd(struct file *f){
+  struct thread *t = thread_current();
+  t->fd_table[t->next_fd++] = f;
+  return t->next_fd - 1;
+}
+
+void delete_fd(int fd){
+  struct thread *t = thread_current();
+  struct file *f = NULL;
+  f = t->fd_table[fd];
+  if(f==NULL)
+    return;
+  file_close(f);
+  t->fd_table[fd] = NULL;
+}
+
 /* load() helpers. */
 
 static bool install_page (void *upage, void *kpage, bool writable);
