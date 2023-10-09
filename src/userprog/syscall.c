@@ -147,8 +147,7 @@ syscall_handler (struct intr_frame *f UNUSED)
     break;
   }
 
-  //printf ("system call! %d\n",call_number);
-  //thread_exit ();
+
 }
 void halt(void){
   shutdown_power_off();
