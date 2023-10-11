@@ -4,7 +4,7 @@
 #include "threads/thread.h"
 #include "filesys/file.h"
 
-#define MAX_FD 64
+#define MAX_FD 127
 #define STDOUT 1
 #define STDIN 0
 

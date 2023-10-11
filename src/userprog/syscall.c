@@ -219,8 +219,11 @@ tid_t exec (const char *cmd_line){
   bool success;
   sema_down(&child_thread->load_lock);
   success = child_thread->load_success;
-  if(!success)
+  if(!success){
+    // printf("load fail \n");
     return -1;
+  }
+  
   return tid;
 }
 int wait (tid_t pid){

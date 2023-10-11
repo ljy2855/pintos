@@ -112,6 +112,7 @@ struct thread
 
     /* Proj 2*/
     struct file **fd_table;
+    struct file *load_file;
     uint8_t next_fd;
 
 #endif

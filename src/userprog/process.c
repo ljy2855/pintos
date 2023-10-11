@@ -39,8 +39,8 @@ process_execute (const char *file_name)
     return TID_ERROR;
   strlcpy (fn_copy, file_name, PGSIZE);
 
-  name = palloc_get_page(0);
-  if(name == NULL)
+  name = palloc_get_page(PAL_ZERO);
+  if (name == NULL)
     return TID_ERROR;
   for(int i = 0 ; i <= strlen(file_name) ; i++){
     if(file_name[i] == '\0' || file_name[i] == ' '){
@@ -52,9 +52,11 @@ process_execute (const char *file_name)
 
   /* Create a new thread to execute FILE_NAME. */
   tid = thread_create (name, PRI_DEFAULT, start_process, fn_copy);
+  
+  palloc_free_page (name); 
   if (tid == TID_ERROR)
     palloc_free_page (fn_copy); 
-    palloc_free_page (name); 
+    
   return tid;
 }
 
@@ -62,6 +64,7 @@ process_execute (const char *file_name)
    running. */
 static void
 start_process (void *file_name_)
+ 
 {
   char *file_name = file_name_;
   struct intr_frame if_;
@@ -79,7 +82,7 @@ start_process (void *file_name_)
   palloc_free_page (file_name);
   if (!success) 
     thread_exit ();
-
+  //file_close(current_thread->load_file);
   /* Start the user process by simulating a return from an
      interrupt, implemented by intr_exit (in
      threads/intr-stubs.S).  Because intr_exit takes all of its
@@ -121,13 +124,15 @@ process_wait (tid_t child_tid UNUSED)
     sema_down(&child_thread->wait_lock);
     status = child_thread->exit_num;
     list_remove(&child_thread->child_thread_elem);
+    //file_allow_write(child_thread->load_file);
     sema_up(&child_thread->memory_lock);
     
-    //sema_up(&child_thread->wait_lock);
+    // sema_up(&child_thread->wait_lock);
+    //printf("exit status : %d\n",status);
     return status;
     
   }
-
+  // printf("cant find child\n");
   return -1;
 }
 
@@ -138,10 +143,23 @@ process_exit (void)
   struct thread *cur = thread_current ();
   uint32_t *pd;
   struct file *f;
+  struct thread *child;
 
   /* Destroy the current process's page directory and switch back
      to the kernel-only page directory. */
   pd = cur->pagedir;
+  struct list_elem *node = list_begin(&cur->child_thread);
+  struct thread *t;
+  if(cur->load_file != NULL)
+    file_close(cur->load_file);
+  while (node != list_end(&cur->child_thread))
+  {
+    // printf("reaping child,\n");
+    t = list_entry(node, struct thread, child_thread_elem);
+    process_wait(t->tid);
+    node = node->next;
+  }
+  
   if (pd != NULL) 
     {
       for (uint8_t i = 2; i < MAX_FD; i++){
@@ -152,6 +170,7 @@ process_exit (void)
         }
       }
       palloc_free_page(cur->fd_table);
+      // 
       /* Correct ordering here is crucial.  We must set
          cur->pagedir to NULL before switching page directories,
          so that a timer interrupt can't switch back to the
@@ -165,6 +184,7 @@ process_exit (void)
     }
   
   sema_up(&cur->wait_lock);
+  
   sema_down(&cur->memory_lock);
 
 }
@@ -294,15 +314,18 @@ load (const char *file_name, void (**eip) (void), void **esp)
   if (t->pagedir == NULL) 
     goto done;
   process_activate ();
-
+ 
+  
   /* Open executable file. */
   file = filesys_open(argv[0]);
+  
+  t->load_file=file;
   if (file == NULL) 
     {
       printf ("load: %s: open failed\n", file_name);
       goto done; 
     }
-
+    file_deny_write(file);
   /* Read and verify executable header. */
   if (file_read (file, &ehdr, sizeof ehdr) != sizeof ehdr
       || memcmp (ehdr.e_ident, "\177ELF\1\1\1", 7)
@@ -430,10 +453,11 @@ load (const char *file_name, void (**eip) (void), void **esp)
   *eip = (void (*)(void))ehdr.e_entry;
 
   success = true;
-
+  
  done:
   /* We arrive here whether the load is successful or not. */
-  file_close (file);
+  //file_close (file);
+  //file_deny_write(t->load_file);
   return success;
 }
 
