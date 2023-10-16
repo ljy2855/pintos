@@ -9,6 +9,7 @@
 #include "pagedir.h"
 #include "filesys/filesys.h"
 #include "filesys/file.h"
+#include "threads/synch.h"
 
 static void syscall_handler (struct intr_frame *);
 void check_valid_address(void * addr);
@@ -29,6 +30,10 @@ int filesize (int fd);
 void seek (int fd, unsigned position);
 unsigned tell (int fd);
 void close (int fd);
+
+struct semaphore file_write_lock;
+struct semaphore file_read_lock;
+unsigned read_cnt;
 
 bool check_bad_fd(int fd){
   if(fd <= STDOUT || fd > MAX_FD)
@@ -57,6 +62,9 @@ void check_valid_address(void * addr){
 void
 syscall_init (void) 
 {
+  sema_init(&file_write,1);
+  sema_init(&file_read_lock,1);
+  read_cnt = 0;
   intr_register_int (0x30, 3, INTR_ON, syscall_handler, "syscall");
 }
 
@@ -233,6 +241,7 @@ int wait (tid_t pid){
 int write (int fd, const void *buffer, unsigned size){
   //printf("%d %s %d\n",fd,buffer,size);
   check_valid_address(buffer);
+  unsigned writen_bytes;
   if(fd == STDOUT){
     //if write stdout
     putbuf(buffer,size);
@@ -247,12 +256,16 @@ int write (int fd, const void *buffer, unsigned size){
     exit(-1);
   else
   {
-    return file_write(f, buffer, size);
+    sema_down(&file_write_lock);
+    writen_bytes = file_write(f, buffer, size);
+    sema_up(&file_write_lock);
+    return writen_bytes;
   }
   return -1;
 }
 int read (int fd, void *buffer, unsigned size){
   unsigned int i;
+  unsigned readn_bytes;
   check_valid_address(buffer);
   if(fd == STDIN){
     for(i = 0; i < size ; i++)
@@ -266,7 +279,19 @@ int read (int fd, void *buffer, unsigned size){
   if(f == NULL)
     exit(-1);
   else{
-    return file_read(f, buffer, size); 
+    sema_down(&file_read_lock);
+    read_cnt++;
+    if(read_cnt) sema_down(&file_write_lock);
+    sema_up(&file_read_lock);
+
+    readn_bytes = file_read(f, buffer, size); 
+    
+    sema_down(&file_read_lock);
+    read_cnt--;
+    if(read_cnt == 0) sema_up(&file_write_lock);
+    sema_up(&file_read_lock);
+
+    return readn_bytes;
   }
   return -1;
 }
