@@ -35,12 +35,18 @@ struct semaphore file_write_lock;
 struct semaphore file_read_lock;
 unsigned read_cnt;
 
+/**
+ * Check fd is out of range
+*/
 bool check_bad_fd(int fd){
   if(fd <= STDOUT || fd > MAX_FD)
     return false;
   return true;
 }
 
+/**
+ * Check addr is not mapped in page table
+*/
 bool check_unmapped_address(void * addr){
   struct thread * t = thread_current();
   void * pte = pagedir_get_page(t->pagedir,addr);
@@ -49,7 +55,9 @@ bool check_unmapped_address(void * addr){
   return true;
 }
 
-
+/**
+ * Check virtual addr is user address and mapped
+*/
 void check_valid_address(void * addr){
   if (!is_user_vaddr(addr) || addr == NULL || addr <= 0x4000 || !check_unmapped_address(addr)){
     exit(-1);
@@ -62,7 +70,7 @@ void check_valid_address(void * addr){
 void
 syscall_init (void) 
 {
-  sema_init(&file_write,1);
+  sema_init(&file_write_lock,1);
   sema_init(&file_read_lock,1);
   read_cnt = 0;
   intr_register_int (0x30, 3, INTR_ON, syscall_handler, "syscall");
@@ -132,7 +140,6 @@ syscall_handler (struct intr_frame *f UNUSED)
      * esp[3] = size
     */
 
-
     check_valid_address(((uint32_t*)f->esp+3));
     f->eax = read(*((uint32_t*)f->esp+1),*((uint32_t*)f->esp+2),*((uint32_t*)f->esp+3));
     break;
@@ -145,10 +152,12 @@ syscall_handler (struct intr_frame *f UNUSED)
     check_valid_address(((uint32_t *)f->esp + 1));
     f->eax = open((const char *)*((uint32_t *)f->esp + 1));
     break;
+
   case SYS_CLOSE:
     check_valid_address(((uint32_t *)f->esp + 1));
     close((int)*((uint32_t *)f->esp + 1));
     break;
+
   case SYS_CREATE:
     /**
      * esp[0] = system call number
@@ -158,6 +167,7 @@ syscall_handler (struct intr_frame *f UNUSED)
     check_valid_address(((uint32_t *)f->esp + 2));
     f->eax = create(*((uint32_t *)f->esp + 1),*((uint32_t *)f->esp + 2));
     break;
+
   case SYS_REMOVE:
     check_valid_address(((uint32_t *)f->esp + 1));
     f->eax = remove((int)*((uint32_t *)f->esp + 1));
@@ -196,7 +206,6 @@ syscall_handler (struct intr_frame *f UNUSED)
      * esp[4] = d
     */
 
-
     check_valid_address(((uint32_t*)f->esp+4));
     f->eax = max_of_four_int(*((uint32_t*)f->esp+1),*((uint32_t*)f->esp+2),*((uint32_t*)f->esp+3),*((uint32_t*)f->esp+4));
     break;
@@ -218,28 +227,31 @@ void exit (int status){
   printf("%s: exit(%d)\n", thread_name(),status);
   thread_exit();
 }
+
 tid_t exec (const char *cmd_line){
+  //check cmd_line buffer is point wrong address
   if(!check_unmapped_address(cmd_line))
     return -1;
 
   tid_t tid = process_execute(cmd_line);
   struct thread * child_thread = get_child(tid);
   bool success;
+
+  //wait child process load file
   sema_down(&child_thread->load_lock);
   success = child_thread->load_success;
   if(!success){
-    // printf("load fail \n");
     return -1;
   }
   
   return tid;
 }
+
 int wait (tid_t pid){
   return process_wait(pid);
 }
 
 int write (int fd, const void *buffer, unsigned size){
-  //printf("%d %s %d\n",fd,buffer,size);
   check_valid_address(buffer);
   unsigned writen_bytes;
   if(fd == STDOUT){
@@ -254,14 +266,13 @@ int write (int fd, const void *buffer, unsigned size){
   struct file *f = get_file(fd);
   if (f == NULL)
     exit(-1);
-  else
-  {
-    sema_down(&file_write_lock);
-    writen_bytes = file_write(f, buffer, size);
-    sema_up(&file_write_lock);
-    return writen_bytes;
-  }
-  return -1;
+
+  sema_down(&file_write_lock);
+  writen_bytes = file_write(f, buffer, size);
+  sema_up(&file_write_lock);
+
+  return writen_bytes;
+  
 }
 int read (int fd, void *buffer, unsigned size){
   unsigned int i;
@@ -278,22 +289,21 @@ int read (int fd, void *buffer, unsigned size){
   struct file *f = get_file(fd);
   if(f == NULL)
     exit(-1);
-  else{
-    sema_down(&file_read_lock);
-    read_cnt++;
-    if(read_cnt) sema_down(&file_write_lock);
-    sema_up(&file_read_lock);
+ 
+  sema_down(&file_read_lock);
+  read_cnt++;
+  if(read_cnt) sema_down(&file_write_lock);
+  sema_up(&file_read_lock);
 
-    readn_bytes = file_read(f, buffer, size); 
-    
-    sema_down(&file_read_lock);
-    read_cnt--;
-    if(read_cnt == 0) sema_up(&file_write_lock);
-    sema_up(&file_read_lock);
+  readn_bytes = file_read(f, buffer, size); 
+  
+  sema_down(&file_read_lock);
+  read_cnt--;
+  if(read_cnt == 0) sema_up(&file_write_lock);
+  sema_up(&file_read_lock);
 
-    return readn_bytes;
-  }
-  return -1;
+  return readn_bytes;
+  
 }
 
 int fibonacci(int n){
@@ -330,7 +340,7 @@ int open(const char *file_name){
 
 void close(int fd){
   //check close stdin, stdout or range out of fd_table
-  if(fd <= STDOUT || fd > MAX_FD)
+  if(!check_bad_fd(fd))
     exit(-1);
   delete_fd(fd);
 }
@@ -359,7 +369,7 @@ void seek(int fd, unsigned position){
   struct file *f = get_file(fd);
   if (f == NULL)
     exit(-1);
-  return file_seek(f, position);
+  file_seek(f, position);
 }
 unsigned tell(int fd){
   if (!check_bad_fd(fd))

@@ -200,6 +200,8 @@ thread_create (const char *name, int priority,
   
   /* Add to run queue. */
   thread_unblock (t);
+
+  /* Allocate file descriptor table*/
   #ifdef USERPROG
     t->fd_table = palloc_get_page(PAL_ZERO);
   #endif

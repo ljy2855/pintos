@@ -143,7 +143,7 @@ process_exit (void)
   struct thread *cur = thread_current ();
   uint32_t *pd;
   struct file *f;
-  struct thread *child;
+ 
 
   /* Destroy the current process's page directory and switch back
      to the kernel-only page directory. */
@@ -159,17 +159,17 @@ process_exit (void)
     process_wait(t->tid);
     node = node->next;
   }
-  
+  for (uint8_t i = 2; i < MAX_FD; i++){
+    f = (struct file *)*((struct file **)cur->fd_table+i);
+    if (f != NULL)
+    {
+      file_close(f);
+    }
+  }
+
+  palloc_free_page(cur->fd_table);
   if (pd != NULL) 
     {
-      for (uint8_t i = 2; i < MAX_FD; i++){
-        f = (struct file *)*((struct file **)cur->fd_table+i);
-        if (f != NULL)
-        {
-          file_close(f);
-        }
-      }
-      palloc_free_page(cur->fd_table);
       // 
       /* Correct ordering here is crucial.  We must set
          cur->pagedir to NULL before switching page directories,
@@ -445,7 +445,7 @@ load (const char *file_name, void (**eip) (void), void **esp)
   //stack return address
   *esp -= 4;
   **(uint32_t **)esp = 0;
-  //hex_dump(*esp, *esp, 100, 1);
+
   free(argv);
   free(argv_addr);
   
@@ -456,22 +456,30 @@ load (const char *file_name, void (**eip) (void), void **esp)
   
  done:
   /* We arrive here whether the load is successful or not. */
-  //file_close (file);
-  //file_deny_write(t->load_file);
   return success;
 }
 
+/**
+ * Get file pointer in current process's fd table
+*/
 struct file *get_file(int fd){
   struct thread *t = thread_current();
 
   return t->fd_table[fd];
 }
+
+/**
+ * Insert file pointer to fd table
+*/
 int insert_fd(struct file *f){
   struct thread *t = thread_current();
-  t->fd_table[t->next_fd++] = f;
-  return t->next_fd - 1;
+  t->fd_table[t->next_fd] = f;
+  return t->next_fd++;
 }
 
+/**
+ * Delete target fd from fd table and close the file
+*/
 void delete_fd(int fd){
   struct thread *t = thread_current();
   struct file *f = NULL;
