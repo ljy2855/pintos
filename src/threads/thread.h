@@ -7,6 +7,11 @@
 #include "synch.h"
 #include "filesys/file.h"
 
+
+#ifndef USERPROG
+extern bool thread_prior_aging;
+#endif
+
 /* States in a thread's life cycle. */
 enum thread_status
   {
@@ -19,7 +24,8 @@ enum thread_status
 /* Thread identifier type.
    You can redefine this to whatever type you like. */
 typedef int tid_t;
-#define TID_ERROR ((tid_t) -1)          /* Error value for tid_t. */
+typedef int Float;
+#define TID_ERROR ((tid_t)-1) /* Error value for tid_t. */
 
 /* Thread priorities. */
 #define PRI_MIN 0                       /* Lowest priority. */
@@ -95,7 +101,12 @@ struct thread
     /* Shared between thread.c and synch.c. */
     struct list_elem elem;              /* List element. */
 
-
+   /*Proj 3*/
+    int64_t wake_time;
+    int donated_priority;
+    struct thread *donated_thread;
+    Float recent_cpu;
+    int nice;
 
 #ifdef USERPROG
     /* Owned by userprog/process.c. */
@@ -157,4 +168,11 @@ void thread_set_nice (int);
 int thread_get_recent_cpu (void);
 int thread_get_load_avg (void);
 
+
+/*proj 3*/
+void insert_priority_job(struct list *queue, struct thread *new);
+void update_load_avg();
+void update_recent_cpu(struct thread *t);
+void update_priority(struct thread *t, bool is_intr);
+bool compare_priority_desc(const struct list_elem *a, const struct list_elem *b, void *aux);
 #endif /* threads/thread.h */
