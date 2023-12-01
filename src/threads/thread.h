@@ -4,6 +4,7 @@
 #include <debug.h>
 #include <list.h>
 #include <stdint.h>
+#include <hash.h>
 #include "synch.h"
 #include "filesys/file.h"
 
@@ -126,6 +127,10 @@ struct thread
     struct file *load_file;
     uint8_t next_fd;
 
+#endif
+
+#ifdef VM
+    struct hash vm_table;
 #endif
 
     /* Owned by thread.c. */
