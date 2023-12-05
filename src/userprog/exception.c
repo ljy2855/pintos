@@ -6,11 +6,17 @@
 #include "threads/thread.h"
 #include "threads/vaddr.h"
 #include "syscall.h"
+#include "vm/page.h"
+#include "threads/palloc.h"
+#include "process.h"
+#include "stdlib.h"
+#include "debug.h"
 /* Number of page faults processed. */
 static long long page_fault_cnt;
 
 static void kill (struct intr_frame *);
 static void page_fault (struct intr_frame *);
+static bool page_fault_handler(struct vm_entry *entry);
 
 /* Registers handlers for interrupts that can be caused by user
    programs.
@@ -148,21 +154,58 @@ page_fault (struct intr_frame *f)
   not_present = (f->error_code & PF_P) == 0;
   write = (f->error_code & PF_W) != 0;
   user = (f->error_code & PF_U) != 0;
-  if (user){
-   // TODO extend swapping prj4 virtual memory
-     exit(-1);
-   }
+  
+  
+//   if (user){
+//    // TODO extend swapping prj4 virtual memory
+//      exit(-1);
+//    }
 
-   if(!user || is_kernel_vaddr(fault_addr))
-   exit(-1);
-     /* To implement virtual memory, delete the rest of the function
-        body, and replace it with code that brings in the page to
-        which fault_addr refers. */
-     printf("Page fault at %p: %s error %s page in %s context.\n",
-            fault_addr,
-            not_present ? "not present" : "rights violation",
-            write ? "writing" : "reading",
-            user ? "user" : "kernel");
+   // if(!user || is_kernel_vaddr(fault_addr))
+   //    exit(-1);
+
+  struct thread *t = thread_current();
+  struct vm_entry *entry = find_vm_entry(&t->vm_table, fault_addr);
+  if (entry == NULL)
+  {
+     exit(-1);
+  }
+
+   if(page_fault_handler(entry)){
+      return;
+   }
+   /* To implement virtual memory, delete the rest of the function
+      body, and replace it with code that brings in the page to
+      which fault_addr refers. */
+   printf("Page fault at %p: %s error %s page in %s context.\n",
+         fault_addr,
+         not_present ? "not present" : "rights violation",
+         write ? "writing" : "reading",
+         user ? "user" : "kernel");
   kill (f);
 }
 
+static bool page_fault_handler(struct vm_entry *entry){
+   if(!entry->is_loaded){
+      // not loaded yet so load from file and install_page
+      uint8_t *kpage = palloc_get_page(PAL_USER);
+      if(kpage == NULL){
+         // TODO Evict PAGE and swap
+         return false;
+      }
+      /* Load this page. */
+      if (file_read_at (entry->file, kpage, entry->read_bytes,entry->offset) != (int) entry->read_bytes)
+        {
+          palloc_free_page (kpage);
+          return false; 
+        }
+      memset (kpage +  entry->read_bytes, 0, entry->zero_bytes);
+      if (!install_page (entry->vaddr, kpage, entry->writable)) 
+        {
+          palloc_free_page (kpage);
+          return false; 
+        }
+        entry->is_loaded;
+        return true;
+   }
+}

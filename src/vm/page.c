@@ -3,6 +3,8 @@
 #include "threads/palloc.h"
 #include "userprog/pagedir.h"
 #include "threads/thread.h"
+#include "threads/synch.h"
+#include "string.h"
 static unsigned hash_func(const struct hash_elem *e, void *aux UNUSED){
     const struct vm_entry *p = hash_entry(e, struct vm_entry, elem);
     return hash_int(p->vaddr);
@@ -30,7 +32,7 @@ static void hash_free_func(struct hash_elem *e, void *aux)
 void init_vm_table(struct hash *table)
 {
 
-    hash_init(table, hash_func, hash_less, (void *)thread_current());
+    hash_init(table, hash_func, hash_less, thread_current());
 }
 
 bool insert_vm_entry(struct hash *table, struct vm_entry *entry){
@@ -52,11 +54,18 @@ struct vm_entry *find_vm_entry(struct hash *table,void *addr){
     struct vm_entry temp;
     struct vm_entry *found_entry = NULL;
 
+    memset(&temp, 0, sizeof(temp));
     temp.vaddr = pg_round_down(addr);
+
     struct hash_elem *found = hash_find(table, &temp.elem);
-    if(found){
+
+        
+    if (found)
+    {
+
         found_entry = hash_entry(found, struct vm_entry, elem);
     }
+
     return found_entry;
 }
 

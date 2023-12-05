@@ -495,7 +495,6 @@ void delete_fd(int fd){
 
 /* load() helpers. */
 
-static bool install_page (void *upage, void *kpage, bool writable);
 
 /* Checks whether PHDR describes a valid, loadable segment in
    FILE and returns true if so, false otherwise. */
@@ -563,8 +562,8 @@ load_segment (struct file *file, off_t ofs, uint8_t *upage,
   ASSERT ((read_bytes + zero_bytes) % PGSIZE == 0);
   ASSERT (pg_ofs (upage) == 0);
   ASSERT (ofs % PGSIZE == 0);
-
-  file_seek (file, ofs);
+  struct thread *t = thread_current();
+  file_seek(file, ofs);
   while (read_bytes > 0 || zero_bytes > 0) 
     {
       /* Calculate how to fill this page.
@@ -592,23 +591,28 @@ load_segment (struct file *file, off_t ofs, uint8_t *upage,
       //     palloc_free_page (kpage);
       //     return false; 
       //   }
+      // enum intr_level old = intr_disable();
       struct vm_entry *new = (struct vm_entry *)malloc(sizeof(struct vm_entry));
+      if(new == NULL)
+        return false;
+      memset(new, 0, sizeof(struct vm_entry));
       new->type = VM_BIN;
       new->vaddr = upage;
       new->writable = writable;
-      new->read_bytes = read_bytes;
-      new->zero_bytes = zero_bytes;
+      new->read_bytes = page_read_bytes;
+      new->zero_bytes = page_zero_bytes;
       new->file = file;
       new->offset = ofs;
       new->is_loaded = false;
-      insert_vm_entry(&thread_current()->vm_table, new);
+      ASSERT(insert_vm_entry(&t->vm_table, new));
 
       /* Advance. */
       read_bytes -= page_read_bytes;
       zero_bytes -= page_zero_bytes;
       ofs += page_read_bytes;
       upage += PGSIZE;
-    }
+      // intr_enable();
+        }
   return true;
 }
 
@@ -624,19 +628,24 @@ setup_stack (void **esp)
   if (kpage != NULL) 
     {
       success = install_page (((uint8_t *) PHYS_BASE) - PGSIZE, kpage, true);
-      if (success)
+      if (success){
         *esp = PHYS_BASE;
+        struct vm_entry *new = (struct vm_entry *)malloc(sizeof(struct vm_entry));
+        memset(new, 0, sizeof(struct vm_entry));
+        new->type = VM_BIN;
+        new->vaddr = ((uint8_t *)PHYS_BASE) - PGSIZE;
+        new->is_loaded = true;
+        new->writable = true;
+        ASSERT(insert_vm_entry(&thread_current()->vm_table, new));
+      }
+        
       else
         palloc_free_page (kpage);
-      struct vm_entry *new = (struct vm_entry *)malloc(sizeof(struct vm_entry));
-      memset(new, 0, sizeof(struct vm_entry));
-      new->type = VM_BIN;
-      new->vaddr = kpage;
-      new->is_loaded = true;
-      new->writable = true;
-      insert_vm_entry(&thread_current()->vm_table, new);
+      
     }
-  return success;
+
+
+    return success;
 }
 
 /* Adds a mapping from user virtual address UPAGE to kernel
@@ -648,7 +657,7 @@ setup_stack (void **esp)
    with palloc_get_page().
    Returns true on success, false if UPAGE is already mapped or
    if memory allocation fails. */
-static bool
+bool
 install_page (void *upage, void *kpage, bool writable)
 {
   struct thread *t = thread_current ();

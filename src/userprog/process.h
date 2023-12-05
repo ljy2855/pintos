@@ -16,4 +16,5 @@ struct thread * get_child(tid_t);
 struct file *get_file(int fd);
 int insert_fd(struct file *f);
 void delete_fd(int fd);
+bool install_page (void *upage, void *kpage, bool writable);
 #endif /* userprog/process.h */

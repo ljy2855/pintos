@@ -10,6 +10,7 @@
 #include "filesys/filesys.h"
 #include "filesys/file.h"
 #include "threads/synch.h"
+#include "vm/page.h"
 
 static void syscall_handler (struct intr_frame *);
 void check_valid_address(void * addr);
@@ -33,6 +34,7 @@ void close (int fd);
 
 struct semaphore file_write_lock;
 struct semaphore file_read_lock;
+struct semaphore file_lock;
 unsigned read_cnt;
 
 /**
@@ -40,6 +42,17 @@ unsigned read_cnt;
 */
 bool check_bad_fd(int fd){
   if(fd <= STDOUT || fd > MAX_FD)
+    return false;
+  return true;
+}
+
+bool check_vm_address(void * addr,bool write){
+  struct vm_entry *entry = find_vm_entry(&thread_current()->vm_table, addr);
+  if (entry == NULL){
+    return false;
+  }
+    
+  if (!entry->writable && write)
     return false;
   return true;
 }
@@ -55,14 +68,18 @@ bool check_unmapped_address(void * addr){
   return true;
 }
 
+bool check_valid_buffer(void * addr, unsigned size, bool write){
+  return check_vm_address(addr, write) && check_vm_address(addr + size, write);
+}
+
 /**
  * Check virtual addr is user address and mapped
 */
 void check_valid_address(void * addr){
-  if (!is_user_vaddr(addr) || addr == NULL || addr <= 0x4000 || !check_unmapped_address(addr)){
+  if (!is_user_vaddr(addr) || addr < (void *)0x08048000 || !check_vm_address(addr,false))
+  {
     exit(-1);
   }
- 
 }
 
 
@@ -72,6 +89,7 @@ syscall_init (void)
 {
   sema_init(&file_write_lock,1);
   sema_init(&file_read_lock,1);
+  sema_init(&file_lock,1);
   read_cnt = 0;
   intr_register_int (0x30, 3, INTR_ON, syscall_handler, "syscall");
 }
@@ -230,9 +248,9 @@ void exit (int status){
 
 tid_t exec (const char *cmd_line){
   //check cmd_line buffer is point wrong address
-  if(!check_unmapped_address(cmd_line))
+  if(!check_vm_address(cmd_line,false))
     return -1;
-
+  sema_down(&file_lock);
   tid_t tid = process_execute(cmd_line);
   struct thread * child_thread = get_child(tid);
   bool success;
@@ -240,6 +258,7 @@ tid_t exec (const char *cmd_line){
   //wait child process load file
   sema_down(&child_thread->load_lock);
   success = child_thread->load_success;
+  sema_up(&file_lock);
   if(!success){
     return -1;
   }
@@ -252,7 +271,9 @@ int wait (tid_t pid){
 }
 
 int write (int fd, const void *buffer, unsigned size){
-  check_valid_address(buffer);
+  if(!check_valid_buffer(buffer,size,false)){
+    exit(-1);
+  }
   unsigned writen_bytes;
   if(fd == STDOUT){
     //if write stdout
@@ -277,7 +298,10 @@ int write (int fd, const void *buffer, unsigned size){
 int read (int fd, void *buffer, unsigned size){
   unsigned int i;
   unsigned readn_bytes;
-  check_valid_address(buffer);
+  if (!check_valid_buffer(buffer,size,true))
+  {
+    exit(-1);
+  }
   if(fd == STDIN){
     for(i = 0; i < size ; i++)
       *((uint8_t*)buffer+i) = (uint8_t)input_getc();
@@ -294,9 +318,9 @@ int read (int fd, void *buffer, unsigned size){
   read_cnt++;
   if(read_cnt) sema_down(&file_write_lock);
   sema_up(&file_read_lock);
-
+  // sema_down(&file_lock);
   readn_bytes = file_read(f, buffer, size); 
-  
+  // sema_up(&file_lock);
   sema_down(&file_read_lock);
   read_cnt--;
   if(read_cnt == 0) sema_up(&file_write_lock);
@@ -331,10 +355,19 @@ int max_of_four_int(int a,int b,int c,int d){
 
 /* Proj 2*/
 int open(const char *file_name){
-  check_valid_address(file_name);
+  if (!check_vm_address(file_name, false))
+  {
+    // PANIC("FILENAME NOT FOUND");
+    exit(-1);
+  }
+  sema_down(&file_lock);
   struct file * f = filesys_open(file_name);
-  if(f == NULL)
+  sema_up(&file_lock);
+  if(f == NULL){
+    // PANIC("FILE NOT FOUND");
     return -1;
+  }
+    
   return insert_fd(f);
 }
 
@@ -342,17 +375,30 @@ void close(int fd){
   //check close stdin, stdout or range out of fd_table
   if(!check_bad_fd(fd))
     exit(-1);
+
   delete_fd(fd);
+  
 }
 bool create(const char *file_name, unsigned initial_size){
-  check_valid_address(file_name);
-  return filesys_create(file_name, initial_size);
+  if (!check_vm_address(file_name, false))
+  {
+    exit(-1);
+  }
+  sema_down(&file_lock);
+  bool success = filesys_create(file_name, initial_size);
+  sema_up(&file_lock);
+  return success;
 }
 
 bool remove(const char *file_name){
-  check_valid_address(file_name);
-
-  return filesys_remove(file_name);
+  if (!check_vm_address(file_name, false))
+  {
+    exit(-1);
+  }
+  sema_down(&file_lock);
+  bool success =filesys_remove(file_name);
+  sema_up(&file_lock);
+  return success;
 }
 
 int filesize(int fd){
