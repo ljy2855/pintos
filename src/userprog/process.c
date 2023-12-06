@@ -636,7 +636,7 @@ setup_stack (void **esp)
         *esp = PHYS_BASE;
         struct vm_entry *new = (struct vm_entry *)malloc(sizeof(struct vm_entry));
         memset(new, 0, sizeof(struct vm_entry));
-        new->type = VM_BIN;
+        new->type = VM_ANON;
         new->vaddr = ((uint8_t *)PHYS_BASE) - PGSIZE;
         new->kpage = kpage->kaddr;
         new->is_loaded = true;

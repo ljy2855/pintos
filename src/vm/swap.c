@@ -67,7 +67,7 @@ void * swap_out(){
         case VM_FILE:
             if(pagedir_is_dirty(entry->t->pagedir,entry->vaddr)){
                 lock_acquire(&swap_lock);
-                file_write_at(entry->file,entry->kpage,entry->read_bytes,entry->offset);
+                file_write_at(entry->file,kaddr,entry->read_bytes,entry->offset);
                 lock_release(&swap_lock);
                 
             }

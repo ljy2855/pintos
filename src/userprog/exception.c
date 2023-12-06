@@ -179,7 +179,7 @@ page_fault (struct intr_frame *f)
    
             struct vm_entry *new = (struct vm_entry *)malloc(sizeof(struct vm_entry));
             memset(new, 0, sizeof(struct vm_entry));
-            new->type = VM_BIN;
+            new->type = VM_ANON;
             new->vaddr = upage;
             new->kpage = kpage->kaddr;
             new->is_loaded = true;
@@ -190,12 +190,13 @@ page_fault (struct intr_frame *f)
        
          return;
       }
-      // PANIC("스택 죽을게..");
+      
      //access bad address
      exit(-1);
   }
   if (!entry->writable && write){
       //reject write on read-only page
+   
       exit(-1);
   }
    
