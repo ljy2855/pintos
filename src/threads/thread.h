@@ -130,7 +130,9 @@ struct thread
 #endif
 
 #ifdef VM
+    /* Proj 4*/   
     struct hash vm_table;
+    struct list mmap_list;
 #endif
 
     /* Owned by thread.c. */

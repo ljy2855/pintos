@@ -18,6 +18,7 @@
 #include "threads/thread.h"
 #include "threads/vaddr.h"
 #include "vm/page.h"
+#include "list.h"
 
 static thread_func start_process NO_RETURN;
 static bool load (const char *cmdline, void (**eip) (void), void **esp);
@@ -72,6 +73,7 @@ start_process (void *file_name_)
   bool success;
 
   init_vm_table(&current_thread->vm_table);
+  list_init(&current_thread->mmap_list);
   /* Initialize interrupt frame and load executable. */
   memset(&if_, 0, sizeof if_);
   if_.gs = if_.fs = if_.es = if_.ds = if_.ss = SEL_UDSEG;
@@ -161,6 +163,7 @@ process_exit (void)
     process_wait(t->tid);
     node = node->next;
   }
+  
   for (uint8_t i = 2; i < MAX_FD; i++){
     f = (struct file *)*((struct file **)cur->fd_table+i);
     if (f != NULL)
@@ -168,6 +171,7 @@ process_exit (void)
       file_close(f);
     }
   }
+
 
   palloc_free_page(cur->fd_table);
   destroy_table(&cur->vm_table);
@@ -634,6 +638,7 @@ setup_stack (void **esp)
         memset(new, 0, sizeof(struct vm_entry));
         new->type = VM_BIN;
         new->vaddr = ((uint8_t *)PHYS_BASE) - PGSIZE;
+        new->kpage = kpage;
         new->is_loaded = true;
         new->writable = true;
         ASSERT(insert_vm_entry(&thread_current()->vm_table, new));
@@ -667,3 +672,4 @@ install_page (void *upage, void *kpage, bool writable)
   return (pagedir_get_page (t->pagedir, upage) == NULL
           && pagedir_set_page (t->pagedir, upage, kpage, writable));
 }
+

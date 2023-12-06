@@ -155,21 +155,46 @@ page_fault (struct intr_frame *f)
   write = (f->error_code & PF_W) != 0;
   user = (f->error_code & PF_U) != 0;
   
-  
-//   if (user){
-//    // TODO extend swapping prj4 virtual memory
-//      exit(-1);
-//    }
+  uint32_t upage = pg_round_down(fault_addr);
 
-   // if(!user || is_kernel_vaddr(fault_addr))
-   //    exit(-1);
+   if(upage < PHYS_BASE && upage >= PHYS_BASE - PGSIZE * 8 * 2){
+      //stack growth
+      uint32_t upage = pg_round_down(fault_addr);
+      uint8_t *kpage = palloc_get_page(PAL_USER | PAL_ZERO);
+      bool success = false;
+      if (kpage != NULL) 
+      {
+         success = install_page (upage, kpage, true);
+         if (success){
+   
+         struct vm_entry *new = (struct vm_entry *)malloc(sizeof(struct vm_entry));
+         memset(new, 0, sizeof(struct vm_entry));
+         new->type = VM_BIN;
+         new->vaddr = upage;
+         new->kpage = kpage;
+         new->is_loaded = true;
+         new->writable = true;
+         ASSERT(insert_vm_entry(&thread_current()->vm_table, new));
+         }
+      else
+        palloc_free_page (kpage);
+      
+    }
+      return;
+   }
 
   struct thread *t = thread_current();
   struct vm_entry *entry = find_vm_entry(&t->vm_table, fault_addr);
   if (entry == NULL)
   {
+     //access bad address
      exit(-1);
   }
+  if (!entry->writable && write){
+      //reject write on read-only page
+      exit(-1);
+  }
+   
 
    if(page_fault_handler(entry)){
       return;
@@ -186,7 +211,8 @@ page_fault (struct intr_frame *f)
 }
 
 static bool page_fault_handler(struct vm_entry *entry){
-   if(!entry->is_loaded){
+
+   if(entry->type == VM_BIN || entry->type == VM_FILE){
       // not loaded yet so load from file and install_page
       uint8_t *kpage = palloc_get_page(PAL_USER);
       if(kpage == NULL){
@@ -206,6 +232,7 @@ static bool page_fault_handler(struct vm_entry *entry){
           return false; 
         }
         entry->is_loaded;
+        entry->kpage = kpage;
         return true;
    }
 }

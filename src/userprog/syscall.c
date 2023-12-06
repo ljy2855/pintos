@@ -11,6 +11,7 @@
 #include "filesys/file.h"
 #include "threads/synch.h"
 #include "vm/page.h"
+#include "string.h"
 
 static void syscall_handler (struct intr_frame *);
 void check_valid_address(void * addr);
@@ -32,9 +33,14 @@ void seek (int fd, unsigned position);
 unsigned tell (int fd);
 void close (int fd);
 
+mapid_t mmap(int fd, void *addr);
+void munmap(mapid_t mapid);
+
+
 struct semaphore file_write_lock;
 struct semaphore file_read_lock;
 struct semaphore file_lock;
+struct lock mapid_lock;
 unsigned read_cnt;
 
 /**
@@ -90,6 +96,7 @@ syscall_init (void)
   sema_init(&file_write_lock,1);
   sema_init(&file_read_lock,1);
   sema_init(&file_lock,1);
+  lock_init(&mapid_lock);
   read_cnt = 0;
   intr_register_int (0x30, 3, INTR_ON, syscall_handler, "syscall");
 }
@@ -197,13 +204,23 @@ syscall_handler (struct intr_frame *f UNUSED)
     break;
 
   case SYS_SEEK:
-    check_valid_address(((uint32_t *)f->esp + 1));
+    check_valid_address(((uint32_t *)f->esp + 2));
     seek((int)*((uint32_t *)f->esp + 1), *((uint32_t *)f->esp + 2));
     break;
   
   case SYS_TELL:
     check_valid_address(((uint32_t *)f->esp + 1));
     f->eax = tell((int)*((uint32_t *)f->esp + 1));
+    break;
+
+  case SYS_MMAP:
+    check_valid_address(((uint32_t *)f->esp + 2));
+    f->eax = mmap((int)*((uint32_t *)f->esp + 1), (void *) *((uint32_t *)f->esp + 2));
+    break;
+
+  case SYS_MUNMAP:
+    check_valid_address(((uint32_t *)f->esp + 1));
+    munmap((mapid_t)*((uint32_t *)f->esp + 1));
     break;
   case SYS_FIBO:
     /**
@@ -243,6 +260,17 @@ void exit (int status){
   struct thread * current_thread = thread_current();
   current_thread->exit_num = status;
   printf("%s: exit(%d)\n", thread_name(),status);
+  for (struct list_elem *e = list_begin(&current_thread->mmap_list); e != list_end(&current_thread->mmap_list);)
+  {
+    
+    struct mmap_entry *entry = list_entry(e, struct mmap_entry, elem);
+    sema_down(&file_lock);
+    remove_mmap_entry(entry);
+    e = list_next(e);
+    file_close(entry->file);
+    free(entry);
+    sema_up(&file_lock);
+  }
   thread_exit();
 }
 
@@ -425,3 +453,60 @@ unsigned tell(int fd){
     return -1;
   return file_tell(f);
 }
+
+static mapid_t
+allocate_mapid (void) 
+{
+  static tid_t next_mapid = 1;
+  tid_t tid;
+
+  lock_acquire (&mapid_lock);
+  tid = next_mapid++;
+  lock_release (&mapid_lock);
+
+  return tid;
+}
+
+mapid_t mmap(int fd,void *addr){
+  
+  if(!check_bad_fd(fd))
+    exit(-1);
+  struct file * f = get_file(fd);
+  unsigned file_size = file_length(f);
+  if (f == NULL)
+    return -1;
+  if (!is_user_vaddr(addr+file_size) || find_vm_entry(&thread_current()->vm_table,addr) || addr < (void *)0x08048000 ||pg_ofs(addr) != 0)
+    return -1;
+  struct mmap_entry * new = malloc(sizeof(struct mmap_entry));
+  memset(new,0,sizeof(struct mmap_entry));
+  new->file = file_reopen(f);
+  new->map_id = allocate_mapid();
+  list_push_back(&thread_current()->mmap_list,&new->elem);
+  list_init(&new->vme_list);
+  if(load_mmap_entry(new,addr))
+    return new->map_id;
+  return -1;
+
+}
+
+
+void munmap(mapid_t mapid){
+  struct list_elem * e;
+  struct mmap_entry * entry = NULL;
+  struct vm_entry * mmap_vm_entry = NULL;
+  struct thread * t = thread_current();
+
+  for(e = list_begin(&t->mmap_list); e != list_end(&t->mmap_list) ; e = list_next(e)){
+    entry = list_entry(e,struct mmap_entry,elem);
+    if(entry->map_id == mapid)
+      break;
+  }
+  if(entry != NULL){
+    sema_down(&file_lock);
+    remove_mmap_entry(entry);
+    list_remove(&entry->elem);
+    free(entry);
+    sema_up(&file_lock);
+  }
+}
+
