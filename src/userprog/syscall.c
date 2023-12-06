@@ -63,19 +63,17 @@ bool check_vm_address(void * addr,bool write){
   return true;
 }
 
-/**
- * Check addr is not mapped in page table
-*/
-bool check_unmapped_address(void * addr){
-  struct thread * t = thread_current();
-  void * pte = pagedir_get_page(t->pagedir,addr);
-  if(pte == NULL)
-    return false;
-  return true;
-}
 
 bool check_valid_buffer(void * addr, unsigned size, bool write){
-  return check_vm_address(addr, write) && check_vm_address(addr + size, write);
+  size_t cur;
+  bool success = true;
+  for(cur=0 ; cur < size ; cur+=PGSIZE){
+    if(!check_vm_address(addr+cur, write)){
+      success= false;
+      break;
+    }
+  }
+  return success;
 }
 
 /**
@@ -493,7 +491,6 @@ mapid_t mmap(int fd,void *addr){
 void munmap(mapid_t mapid){
   struct list_elem * e;
   struct mmap_entry * entry = NULL;
-  struct vm_entry * mmap_vm_entry = NULL;
   struct thread * t = thread_current();
 
   for(e = list_begin(&t->mmap_list); e != list_end(&t->mmap_list) ; e = list_next(e)){

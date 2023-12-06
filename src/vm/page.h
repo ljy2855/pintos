@@ -1,6 +1,10 @@
+#ifndef VM_PAGE_H
+#define VM_PAGE_H
+
 #include <hash.h>
 #include <list.h>
 #include <stdlib.h>
+#include <threads/thread.h>
 
 typedef int mapid_t ;
 
@@ -25,6 +29,8 @@ struct vm_entry{
 
     struct thread *t;
     struct list_elem mmap_elem;
+
+    size_t swap_index;
 };
 
 struct mmap_entry{
@@ -34,6 +40,14 @@ struct mmap_entry{
     struct list vme_list;
 };
 
+struct page{
+    struct vm_entry *entry;
+    struct list_elem elem;
+    void *kaddr;
+};
+
+struct list lru_pages;
+
 void init_vm_table(struct hash *table);
 bool insert_vm_entry(struct hash *table, struct vm_entry *entry);
 bool delete_vm_entry(struct hash *table, struct vm_entry *entry);
@@ -42,3 +56,5 @@ void destroy_table(struct hash *table);
 
 bool load_mmap_entry(struct mmap_entry * entry,void * upage);
 void remove_mmap_entry(struct mmap_entry *entry);
+
+#endif

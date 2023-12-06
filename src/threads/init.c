@@ -28,6 +28,7 @@
 #include "userprog/gdt.h"
 #include "userprog/syscall.h"
 #include "userprog/tss.h"
+#include "vm/swap.h"
 #else
 #include "tests/threads/tests.h"
 #endif
@@ -98,6 +99,8 @@ main (void)
   palloc_init (user_page_limit);
   malloc_init ();
   paging_init ();
+  list_init(&lru_pages);
+  
 
   /* Segmentation. */
 #ifdef USERPROG
@@ -128,7 +131,7 @@ main (void)
 #endif
 
   printf ("Boot complete.\n");
-  
+  swap_init();
   /* Run actions specified on kernel command line. */
   run_actions (argv);
 

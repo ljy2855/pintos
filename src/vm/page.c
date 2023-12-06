@@ -1,11 +1,11 @@
 #include "page.h"
 #include "threads/vaddr.h"
-#include "threads/palloc.h"
 #include "userprog/pagedir.h"
 #include "threads/thread.h"
 #include "threads/synch.h"
 #include "string.h"
 #include "filesys/file.h"
+#include "frame.h"
 static unsigned hash_func(const struct hash_elem *e, void *aux UNUSED){
     const struct vm_entry *p = hash_entry(e, struct vm_entry, elem);
     return hash_int(p->vaddr);
@@ -24,7 +24,7 @@ static void hash_free_func(struct hash_elem *e, void *aux)
     struct thread *t = (struct thread *)aux;
     struct vm_entry *p = hash_entry(e, struct vm_entry, elem);
     if(p->is_loaded){
-        palloc_free_page(p->kpage);
+        free_page(p->kpage);
         pagedir_clear_page(t->pagedir,p->vaddr);
     }
     free(p); 
@@ -37,13 +37,15 @@ void init_vm_table(struct hash *table)
 }
 
 bool insert_vm_entry(struct hash *table, struct vm_entry *entry){
-    struct hash_elem * old = hash_insert(table, &entry->elem);
+    entry->t = thread_current();
+    struct hash_elem *old = hash_insert(table, &entry->elem);
     if(old == NULL)
         return true;
     else
         return false;
 }
 bool delete_vm_entry(struct hash *table, struct vm_entry *entry){
+    // hash_free_func(&entry->elem, entry->t);
     struct hash_elem *removed = hash_delete(table, &entry->elem);
     if(removed == NULL)
         return false;
@@ -130,7 +132,7 @@ void remove_mmap_entry(struct mmap_entry *entry)
         mmap_vm_entry = list_entry(e, struct vm_entry, mmap_elem);
         if (pagedir_is_dirty(t->pagedir, mmap_vm_entry->vaddr))
         {
-             file_write_at(entry->file, mmap_vm_entry->kpage, PGSIZE, mmap_vm_entry->offset);
+            file_write_at(entry->file, mmap_vm_entry->kpage, PGSIZE, mmap_vm_entry->offset);
 
         }
         delete_vm_entry(&t->vm_table, mmap_vm_entry);

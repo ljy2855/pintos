@@ -6,11 +6,15 @@
 #include "threads/thread.h"
 #include "threads/vaddr.h"
 #include "syscall.h"
-#include "vm/page.h"
 #include "threads/palloc.h"
 #include "process.h"
 #include "stdlib.h"
 #include "debug.h"
+#include "vm/swap.h"
+#include "vm/frame.h"
+#include <string.h>
+#include <stdlib.h>
+
 /* Number of page faults processed. */
 static long long page_fault_cnt;
 
@@ -18,6 +22,7 @@ static void kill (struct intr_frame *);
 static void page_fault (struct intr_frame *);
 static bool page_fault_handler(struct vm_entry *entry);
 
+#define MAX_STACK_SIZE (8 * 1024 * 1024)
 /* Registers handlers for interrupts that can be caused by user
    programs.
 
@@ -155,38 +160,37 @@ page_fault (struct intr_frame *f)
   write = (f->error_code & PF_W) != 0;
   user = (f->error_code & PF_U) != 0;
   
-  uint32_t upage = pg_round_down(fault_addr);
-
-   if(upage < PHYS_BASE && upage >= PHYS_BASE - PGSIZE * 8 * 2){
-      //stack growth
-      uint32_t upage = pg_round_down(fault_addr);
-      uint8_t *kpage = palloc_get_page(PAL_USER | PAL_ZERO);
-      bool success = false;
-      if (kpage != NULL) 
-      {
-         success = install_page (upage, kpage, true);
-         if (success){
-   
-         struct vm_entry *new = (struct vm_entry *)malloc(sizeof(struct vm_entry));
-         memset(new, 0, sizeof(struct vm_entry));
-         new->type = VM_BIN;
-         new->vaddr = upage;
-         new->kpage = kpage;
-         new->is_loaded = true;
-         new->writable = true;
-         ASSERT(insert_vm_entry(&thread_current()->vm_table, new));
-         }
-      else
-        palloc_free_page (kpage);
-      
-    }
-      return;
-   }
+  
 
   struct thread *t = thread_current();
   struct vm_entry *entry = find_vm_entry(&t->vm_table, fault_addr);
   if (entry == NULL)
   {
+   
+
+      if(fault_addr < PHYS_BASE && fault_addr >= PHYS_BASE - MAX_STACK_SIZE && fault_addr >= f->esp - 32){
+         //stack growth
+         void * upage = pg_round_down(fault_addr);
+         struct page *kpage = alloc_page(PAL_USER | PAL_ZERO);
+         bool success = false;
+      
+         success = install_page (upage, kpage->kaddr, true);
+         if (success){
+   
+            struct vm_entry *new = (struct vm_entry *)malloc(sizeof(struct vm_entry));
+            memset(new, 0, sizeof(struct vm_entry));
+            new->type = VM_BIN;
+            new->vaddr = upage;
+            new->kpage = kpage->kaddr;
+            new->is_loaded = true;
+            new->writable = true;
+            kpage->entry = new;
+            ASSERT(insert_vm_entry(&thread_current()->vm_table, new));
+         }
+       
+         return;
+      }
+      // PANIC("스택 죽을게..");
      //access bad address
      exit(-1);
   }
@@ -214,25 +218,41 @@ static bool page_fault_handler(struct vm_entry *entry){
 
    if(entry->type == VM_BIN || entry->type == VM_FILE){
       // not loaded yet so load from file and install_page
-      uint8_t *kpage = palloc_get_page(PAL_USER);
-      if(kpage == NULL){
-         // TODO Evict PAGE and swap
-         return false;
-      }
+      struct page *kpage = alloc_page(PAL_USER);
+      ASSERT(kpage);
       /* Load this page. */
-      if (file_read_at (entry->file, kpage, entry->read_bytes,entry->offset) != (int) entry->read_bytes)
+      if (file_read_at (entry->file, kpage->kaddr, entry->read_bytes,entry->offset) != (int) entry->read_bytes)
         {
-          palloc_free_page (kpage);
+          free_page (kpage->kaddr);
           return false; 
         }
-      memset (kpage +  entry->read_bytes, 0, entry->zero_bytes);
-      if (!install_page (entry->vaddr, kpage, entry->writable)) 
+      memset (kpage->kaddr +  entry->read_bytes, 0, entry->zero_bytes);
+      if (!install_page (entry->vaddr, kpage->kaddr, entry->writable)) 
         {
-          palloc_free_page (kpage);
+          free_page (kpage->kaddr);
           return false; 
         }
-        entry->is_loaded;
-        entry->kpage = kpage;
+        entry->is_loaded = true;
+        entry->kpage = kpage->kaddr;
+        kpage->entry = entry;
         return true;
+   }else if(entry->type == VM_ANON){
+      struct page *kpage = alloc_page(PAL_USER);
+      ASSERT(kpage);
+      if (!install_page (entry->vaddr, kpage->kaddr, true)) 
+        {
+          free_page (kpage->kaddr);
+          return false; 
+        }
+
+      read_swap_page(entry->swap_index,kpage->kaddr);
+
+      entry->is_loaded = true;
+      entry->kpage = kpage->kaddr;
+      
+      kpage->entry = entry;
+      
+      return true;
+      //TODO
    }
 }
