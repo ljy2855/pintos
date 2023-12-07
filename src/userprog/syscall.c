@@ -12,6 +12,9 @@
 #include "threads/synch.h"
 #include "vm/page.h"
 #include "string.h"
+#include "threads/palloc.h"
+
+#define MAX_STACK_SIZE (8 * 1024 * 1024)
 
 static void syscall_handler (struct intr_frame *);
 void check_valid_address(void * addr);

@@ -166,33 +166,38 @@ page_fault (struct intr_frame *f)
   struct vm_entry *entry = find_vm_entry(&t->vm_table, fault_addr);
   if (entry == NULL)
   {
-   
-
       if(fault_addr < PHYS_BASE && fault_addr >= PHYS_BASE - MAX_STACK_SIZE && fault_addr >= f->esp - 32){
          //stack growth
-         void * upage = pg_round_down(fault_addr);
-         struct page *kpage = alloc_page(PAL_USER | PAL_ZERO);
-         bool success = false;
-      
-         success = install_page (upage, kpage->kaddr, true);
-         if (success){
-   
-            struct vm_entry *new = (struct vm_entry *)malloc(sizeof(struct vm_entry));
-            memset(new, 0, sizeof(struct vm_entry));
-            new->type = VM_ANON;
-            new->vaddr = upage;
-            new->kpage = kpage->kaddr;
-            new->is_loaded = true;
-            new->writable = true;
-            kpage->entry = new;
-            ASSERT(insert_vm_entry(&thread_current()->vm_table, new));
+         for (; fault_addr < PHYS_BASE;fault_addr+=PGSIZE)
+         {
+            if(!find_vm_entry(&t->vm_table, fault_addr)){
+               void *upage = pg_round_down(fault_addr);
+               struct page *kpage = alloc_page(PAL_USER | PAL_ZERO);
+               bool success = false;
+
+               success = install_page(upage, kpage->kaddr, true);
+               if (success)
+               {
+
+                  struct vm_entry *new = (struct vm_entry *)malloc(sizeof(struct vm_entry));
+                  memset(new, 0, sizeof(struct vm_entry));
+                  new->type = VM_ANON;
+                  new->vaddr = upage;
+                  new->kpage = kpage->kaddr;
+                  new->is_loaded = true;
+                  new->writable = true;
+                  kpage->entry = new;
+                  ASSERT(insert_vm_entry(&thread_current()->vm_table, new));
+               }
+            }
+            
          }
+         
        
          return;
       }
-      
-     //access bad address
-     exit(-1);
+      // access bad address
+      exit(-1);
   }
   if (!entry->writable && write){
       //reject write on read-only page
