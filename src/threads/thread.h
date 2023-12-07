@@ -178,7 +178,7 @@ int thread_get_load_avg (void);
 
 /*proj 3*/
 void insert_priority_job(struct list *queue, struct thread *new);
-void update_load_avg();
+void update_load_avg(void);
 void update_recent_cpu(struct thread *t);
 void update_priority(struct thread *t, bool is_intr);
 bool compare_priority_desc(const struct list_elem *a, const struct list_elem *b, void *aux);

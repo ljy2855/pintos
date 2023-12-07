@@ -6,7 +6,7 @@
 #include <stdlib.h>
 #include <threads/thread.h>
 
-typedef int mapid_t ;
+typedef int mapid_t;
 
 enum vm_type
 {
@@ -15,10 +15,10 @@ enum vm_type
     VM_ANON,
 };
 
-struct vm_entry{
+struct vm_entry
+{
     enum vm_type type;
     void *vaddr;
-    void *kpage;
     bool writable;
     bool is_loaded;
     struct file *file;
@@ -33,14 +33,16 @@ struct vm_entry{
     size_t swap_index;
 };
 
-struct mmap_entry{
+struct mmap_entry
+{
     mapid_t map_id;
-    struct file * file;
+    struct file *file;
     struct list_elem elem;
     struct list vme_list;
 };
 
-struct page{
+struct page
+{
     struct vm_entry *entry;
     struct list_elem elem;
     void *kaddr;
@@ -54,7 +56,7 @@ bool delete_vm_entry(struct hash *table, struct vm_entry *entry);
 struct vm_entry *find_vm_entry(struct hash *table, void *addr);
 void destroy_table(struct hash *table);
 
-bool load_mmap_entry(struct mmap_entry * entry,void * upage);
+bool load_mmap_entry(struct mmap_entry *entry, void *upage);
 void remove_mmap_entry(struct mmap_entry *entry);
 
 #endif
