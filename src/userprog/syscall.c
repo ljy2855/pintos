@@ -264,15 +264,14 @@ void exit(int status)
   printf("%s: exit(%d)\n", thread_name(), status);
   for (struct list_elem *e = list_begin(&current_thread->mmap_list); e != list_end(&current_thread->mmap_list);)
   {
-
     struct mmap_entry *entry = list_entry(e, struct mmap_entry, elem);
     sema_down(&file_lock);
     remove_mmap_entry(entry);
-    e = list_next(e);
-    file_close(entry->file);
-    free(entry);
     sema_up(&file_lock);
+    e = list_next(e);
+    free(entry);
   }
+  
   thread_exit();
 }
 
@@ -357,9 +356,9 @@ int read(int fd, void *buffer, unsigned size)
   if (read_cnt)
     sema_down(&file_write_lock);
   sema_up(&file_read_lock);
-  // sema_down(&file_lock);
+
   readn_bytes = file_read(f, buffer, size);
-  // sema_up(&file_lock);
+
   sema_down(&file_read_lock);
   read_cnt--;
   if (read_cnt == 0)
@@ -494,11 +493,13 @@ mapid_t mmap(int fd, void *addr)
   unsigned file_size = file_length(f);
   if (f == NULL)
     return -1;
+
   if (!is_user_vaddr(addr + file_size) 
   || find_vm_entry(&thread_current()->vm_table, addr) 
   || addr < (void *)0x08048000 
   || pg_ofs(addr) != 0)
     return -1;
+    
   struct mmap_entry *new = malloc(sizeof(struct mmap_entry));
   memset(new, 0, sizeof(struct mmap_entry));
   new->file = file_reopen(f);
@@ -529,6 +530,5 @@ void munmap(mapid_t mapid)
     sema_up(&file_lock);
     list_remove(&entry->elem);
     free(entry);
-    
-  }
+    }
 }

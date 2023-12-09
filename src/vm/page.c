@@ -134,4 +134,5 @@ void remove_mmap_entry(struct mmap_entry *entry)
         }
         delete_vm_entry(&mmap_vm_entry->t->vm_table, mmap_vm_entry);
     }
+    file_close(entry->file);
 }

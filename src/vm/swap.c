@@ -30,12 +30,10 @@ struct page *select_victim()
         if (cur_page->entry->is_loaded && t == cur_page->entry->t)
         {
             if (!pagedir_is_accessed(cur_page->entry->t->pagedir, cur_page->entry->vaddr))
-            {
-                // 접근되지 않은 페이지 발견
+            {   
                 break;
             }
 
-            // 접근 비트를 초기화하고 다음 페이지로 이동
             pagedir_set_accessed(cur_page->entry->t->pagedir, cur_page->entry->vaddr, false);
         }
         clock_pointer = list_next(clock_pointer);

@@ -5,7 +5,7 @@ struct page *alloc_page(enum palloc_flags flags)
 {
     void *kaddr = palloc_get_page(flags);
     struct page *new_page;
-    if (kaddr == NULL)
+    while (kaddr == NULL)
     {
         // TODO SWAP OUT
         kaddr = swap_out();
