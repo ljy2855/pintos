@@ -39,6 +39,7 @@ tid_t process_execute(const char *file_name)
     return TID_ERROR;
   strlcpy(fn_copy, file_name, PGSIZE);
 
+  /* Allocate page for process name and copy from filename */
   name = palloc_get_page(PAL_ZERO);
   if (name == NULL)
     return TID_ERROR;
@@ -55,6 +56,7 @@ tid_t process_execute(const char *file_name)
   /* Create a new thread to execute FILE_NAME. */
   tid = thread_create(name, PRI_DEFAULT, start_process, fn_copy);
 
+  /* Free page for name after thread create */
   palloc_free_page(name);
   if (tid == TID_ERROR)
     palloc_free_page(fn_copy);
@@ -73,8 +75,10 @@ start_process(void *file_name_)
   struct thread *current_thread = thread_current();
   bool success;
 
+  /* Init vm table, mmap list*/
   init_vm_table(&current_thread->vm_table);
   list_init(&current_thread->mmap_list);
+
   /* Initialize interrupt frame and load executable. */
   memset(&if_, 0, sizeof if_);
   if_.gs = if_.fs = if_.es = if_.ds = if_.ss = SEL_UDSEG;
@@ -82,6 +86,8 @@ start_process(void *file_name_)
   if_.eflags = FLAG_IF | FLAG_MBS;
   success = load(file_name, &if_.eip, &if_.esp);
   current_thread->load_success = success;
+
+  /* Release load lock for wake up exec syscall */
   sema_up(&current_thread->load_lock);
   /* If load failed, quit. */
   palloc_free_page(file_name);
@@ -285,7 +291,6 @@ static bool load_segment(struct file *file, off_t ofs, uint8_t *upage,
    Returns true if successful, false otherwise. */
 bool load(const char *file_name, void (**eip)(void), void **esp)
 {
-  // ASSERT(false);
   struct thread *t = thread_current();
   struct Elf32_Ehdr ehdr;
   struct file *file = NULL;
@@ -293,7 +298,7 @@ bool load(const char *file_name, void (**eip)(void), void **esp)
   bool success = false;
   int i;
 
-  // TODO parse file_name to argv
+  /* Parse file_name to argv */
   char **argv;
   int argc = 0;
   char *cur_word, *next_word;
@@ -320,6 +325,7 @@ bool load(const char *file_name, void (**eip)(void), void **esp)
   /* Open executable file. */
   file = filesys_open(argv[0]);
 
+  /* Save file for closing file when process exit */
   t->load_file = file;
   if (file == NULL)
   {
@@ -396,14 +402,14 @@ bool load(const char *file_name, void (**eip)(void), void **esp)
   if (!setup_stack(esp))
     goto done;
 
-  // TODO stack argv to esp
+  // Store argv to stack
   int data_size = 0;
   char **argv_addr = (char **)malloc(sizeof(char *) * argc);
   int total_data_size = 0;
   int word_align = 0;
   for (i = argc - 1; i >= 0; i--)
   {
-    // stack each argv to esp reverse
+    // Stack each argv to esp reverse
     data_size = strlen(argv[i]) + 1;
     total_data_size += data_size;
     *esp -= data_size;
@@ -411,33 +417,33 @@ bool load(const char *file_name, void (**eip)(void), void **esp)
     argv_addr[i] = *esp;
   }
 
-  // move esp to fit word align
+  // Move esp to fit word align
   if (total_data_size % 4)
   {
-    // if word_align not fit
+    // If word_align not fit
     word_align = 4 - total_data_size % 4;
   }
   *esp -= word_align;
 
-  // stack null
+  // Stack null
   *esp -= 4;
   **(uint32_t **)esp = 0;
 
-  // stack argv elements addr
+  // Stack argv elements addr
   for (i = argc - 1; i >= 0; i--)
   {
     *esp -= 4;
     **(uint32_t **)esp = argv_addr[i];
   }
-  // stack argv addr
+  // Stack argv addr
   *esp -= 4;
   **(uint32_t **)esp = *esp + 4;
 
-  // stack argc
+  // Stack argc
   *esp -= 4;
   **(uint32_t **)esp = argc;
 
-  // stack return address
+  // Stack return address
   *esp -= 4;
   **(uint32_t **)esp = 0;
 
@@ -586,7 +592,6 @@ load_segment(struct file *file, off_t ofs, uint8_t *upage,
     zero_bytes -= page_zero_bytes;
     ofs += page_read_bytes;
     upage += PGSIZE;
-
   }
   return true;
 }
