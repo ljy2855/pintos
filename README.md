@@ -9,6 +9,8 @@
 
 이렇게 네개의 파트이며 순차적으로 프로젝트로 구현한다.
 
+**해당 레포는 VM까지 구현되어 있으며, 113 testcase 모두 통과**
+
 ## Prj1 - UserProg 1
 >ELF binary 파일을 핀토스에서 load후 user mode로 실행이 가능하도록 한다.
 
@@ -39,3 +41,9 @@ user mode에서 실행하는 system call은 stack에 arguments들을 쌓고 inte
 syscall_handler 내부에서 stack의 esp로부터 argument들을 확인 후 system call number에 해당하는 구현을 완료후 return 값을 eax에 담아 user mode로 전환한다.
 
 [prj1 submit](https://github.com/ljy2855/pintos/tree/0eef4d67e9ce0dd48ff9d7ef67910fe01e64d574)
+
+## Prj2 - Thread 
+
+## Prj3 - UserProg 2 
+
+## Prj4 - VM 
