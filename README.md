@@ -9,7 +9,9 @@
 
 이렇게 네개의 파트이며 순차적으로 프로젝트로 구현한다.
 
-**해당 레포는 VM까지 구현되어 있으며, 113 testcase 모두 통과**
+**해당 레포는 VM까지 구현되어 있으며, 113 testcases 통과**
+
+![image](https://github.com/user-attachments/assets/3443af03-4510-492e-a7bc-ad7fa8b03e37)
 
 ## Prj1 - UserProg 1
 >ELF binary 파일을 핀토스에서 load후 user mode로 실행이 가능하도록 한다.
