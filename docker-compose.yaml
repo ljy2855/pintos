@@ -8,4 +8,4 @@ services:
     working_dir: /pintos
     hostname: pintos_cocopam
     tty: true
-    entrypoint: bash
+    entrypoint: bash -c "echo 'export TMOUT=0' >> ~/.bashrc && bash"
