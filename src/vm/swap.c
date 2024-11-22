@@ -1,12 +1,12 @@
 #include "swap.h"
-#include "userprog/pagedir.h"
-#include <list.h>
-#include "filesys/file.h"
-#include <debug.h>
+#include "bitmap.h"
 #include "devices/block.h"
+#include "filesys/file.h"
 #include "threads/synch.h"
 #include "threads/vaddr.h"
-#include "bitmap.h"
+#include "userprog/pagedir.h"
+#include <debug.h>
+#include <list.h>
 #define SECTORS_PER_PAGE (PGSIZE / BLOCK_SECTOR_SIZE)
 static struct block *swap_block;
 static struct bitmap *swap_bitmap;
@@ -18,126 +18,112 @@ size_t write_swap_page(void *kaddr);
 
 struct list_elem *clock_pointer = NULL;
 
-struct page *select_victim()
-{
-    struct thread *t = thread_current();
-    if (clock_pointer == NULL)
-        clock_pointer = list_begin(&lru_pages);
-    struct page *cur_page;
-    while (true)
-    {
-        cur_page = list_entry(clock_pointer, struct page, elem);
-        if (cur_page->entry->is_loaded && t == cur_page->entry->t)
-        {
-            if (!pagedir_is_accessed(cur_page->entry->t->pagedir, cur_page->entry->vaddr))
-            {   
-                break;
-            }
-
-            pagedir_set_accessed(cur_page->entry->t->pagedir, cur_page->entry->vaddr, false);
-        }
-        clock_pointer = list_next(clock_pointer);
-        if (clock_pointer == list_end(&lru_pages))
-            clock_pointer = list_begin(&lru_pages);
-    }
-
-    return cur_page;
-}
-
-void *swap_out()
-{
-    struct page *freed_page = select_victim();
-
-    ASSERT(freed_page);
-    struct vm_entry *entry = freed_page->entry;
-
-    ASSERT(entry);
-    void *kaddr = freed_page->kaddr;
-    switch (entry->type)
-    {
-    case VM_BIN:
-        if (pagedir_is_dirty(entry->t->pagedir, entry->vaddr))
-        {
-            // TODO disk write
-            entry->swap_index = write_swap_page(freed_page->kaddr);
-            ASSERT(entry->swap_index != BITMAP_ERROR);
-
-            entry->type = VM_ANON;
-        }
-        entry->is_loaded = false;
-        pagedir_clear_page(entry->t->pagedir, entry->vaddr);
+struct page *select_victim() {
+  struct thread *t = thread_current();
+  if (clock_pointer == NULL)
+    clock_pointer = list_begin(&lru_pages);
+  struct page *cur_page;
+  while (true) {
+    cur_page = list_entry(clock_pointer, struct page, elem);
+    if (cur_page->entry->is_loaded && t == cur_page->entry->t) {
+      if (!pagedir_is_accessed(cur_page->entry->t->pagedir,
+                               cur_page->entry->vaddr)) {
         break;
-    case VM_FILE:
-        if (pagedir_is_dirty(entry->t->pagedir, entry->vaddr))
-        {
-            lock_acquire(&swap_lock);
-            file_write_at(entry->file, kaddr, entry->read_bytes, entry->offset);
-            lock_release(&swap_lock);
-        }
-        entry->is_loaded = false;
-        pagedir_clear_page(entry->t->pagedir, entry->vaddr);
-        break;
+      }
 
-    case VM_ANON:
-        entry->swap_index = write_swap_page(freed_page->kaddr);
-        entry->is_loaded = false;
-        ASSERT(entry->swap_index != BITMAP_ERROR);
-
-        pagedir_clear_page(entry->t->pagedir, entry->vaddr);
-        break;
+      pagedir_set_accessed(cur_page->entry->t->pagedir, cur_page->entry->vaddr,
+                           false);
     }
+    clock_pointer = list_next(clock_pointer);
+    if (clock_pointer == list_end(&lru_pages))
+      clock_pointer = list_begin(&lru_pages);
+  }
 
-    return kaddr;
+  return cur_page;
 }
 
-void swap_init(void)
-{
-    swap_block = block_get_role(BLOCK_SWAP);
-    if (swap_block == NULL)
-    {
-        PANIC("No swap block device found.");
+void *swap_out() {
+  struct page *freed_page = select_victim();
+
+  ASSERT(freed_page);
+  struct vm_entry *entry = freed_page->entry;
+
+  ASSERT(entry);
+  void *kaddr = freed_page->kaddr;
+  switch (entry->type) {
+  case VM_BIN:
+    if (pagedir_is_dirty(entry->t->pagedir, entry->vaddr)) {
+      // TODO disk write
+      entry->swap_index = write_swap_page(freed_page->kaddr);
+      ASSERT(entry->swap_index != BITMAP_ERROR);
+
+      entry->type = VM_ANON;
     }
+    entry->is_loaded = false;
+    pagedir_clear_page(entry->t->pagedir, entry->vaddr);
+    break;
+  case VM_FILE:
+    if (pagedir_is_dirty(entry->t->pagedir, entry->vaddr)) {
+      lock_acquire(&swap_lock);
+      file_write_at(entry->file, kaddr, entry->read_bytes, entry->offset);
+      lock_release(&swap_lock);
+    }
+    entry->is_loaded = false;
+    pagedir_clear_page(entry->t->pagedir, entry->vaddr);
+    break;
 
-    swap_bitmap = bitmap_create(block_size(swap_block) / SECTORS_PER_PAGE);
-    bitmap_set_all(swap_bitmap, false);
+  case VM_ANON:
+    entry->swap_index = write_swap_page(freed_page->kaddr);
+    entry->is_loaded = false;
+    ASSERT(entry->swap_index != BITMAP_ERROR);
 
-    lock_init(&swap_lock);
+    pagedir_clear_page(entry->t->pagedir, entry->vaddr);
+    break;
+  }
+
+  return kaddr;
 }
 
-size_t find_free_swap_slot(void)
-{
-    lock_acquire(&swap_lock);
-    size_t free_slot = bitmap_scan_and_flip(swap_bitmap, 0, 1, false);
-    lock_release(&swap_lock);
-    return free_slot;
+void swap_init(void) {
+  swap_block = block_get_role(BLOCK_SWAP);
+  if (swap_block == NULL) {
+    PANIC("No swap block device found.");
+  }
+
+  swap_bitmap = bitmap_create(block_size(swap_block) / SECTORS_PER_PAGE);
+  bitmap_set_all(swap_bitmap, false);
+
+  lock_init(&swap_lock);
 }
 
-size_t write_swap_page(void *kaddr)
-{
-    size_t free_slot = find_free_swap_slot();
-    if (free_slot == BITMAP_ERROR)
-    {
-        PANIC("No free swap slots available.");
-    }
-
-    lock_acquire(&swap_lock);
-    for (int i = 0; i < SECTORS_PER_PAGE; i++)
-    {
-        block_sector_t sector = free_slot * SECTORS_PER_PAGE + i;
-        block_write(swap_block, sector, kaddr + i * BLOCK_SECTOR_SIZE);
-    }
-    lock_release(&swap_lock);
-    return free_slot;
+size_t find_free_swap_slot(void) {
+  lock_acquire(&swap_lock);
+  size_t free_slot = bitmap_scan_and_flip(swap_bitmap, 0, 1, false);
+  lock_release(&swap_lock);
+  return free_slot;
 }
 
-void read_swap_page(size_t disk_index, void *kaddr)
-{
-    lock_acquire(&swap_lock);
-    for (int i = 0; i < SECTORS_PER_PAGE; i++)
-    {
-        block_sector_t sector = disk_index * SECTORS_PER_PAGE + i;
-        block_read(swap_block, sector, kaddr + i * BLOCK_SECTOR_SIZE);
-    }
-    bitmap_flip(swap_bitmap, disk_index);
-    lock_release(&swap_lock);
+size_t write_swap_page(void *kaddr) {
+  size_t free_slot = find_free_swap_slot();
+  if (free_slot == BITMAP_ERROR) {
+    PANIC("No free swap slots available.");
+  }
+
+  lock_acquire(&swap_lock);
+  for (int i = 0; i < SECTORS_PER_PAGE; i++) {
+    block_sector_t sector = free_slot * SECTORS_PER_PAGE + i;
+    block_write(swap_block, sector, kaddr + i * BLOCK_SECTOR_SIZE);
+  }
+  lock_release(&swap_lock);
+  return free_slot;
+}
+
+void read_swap_page(size_t disk_index, void *kaddr) {
+  lock_acquire(&swap_lock);
+  for (int i = 0; i < SECTORS_PER_PAGE; i++) {
+    block_sector_t sector = disk_index * SECTORS_PER_PAGE + i;
+    block_read(swap_block, sector, kaddr + i * BLOCK_SECTOR_SIZE);
+  }
+  bitmap_flip(swap_bitmap, disk_index);
+  lock_release(&swap_lock);
 }
