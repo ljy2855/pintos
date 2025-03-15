@@ -1,51 +1,96 @@
 # Pintos project
-32비트 기반 minimal한 os를 구현하면서 운영체제의 역할 및 기능들을 일부 구현해본다.
+32비트 기반의 최소 운영체제(minimal OS)를 구현하면서, 운영체제가 담당하는 핵심 기능을 직접 구현한다.
+이 프로젝트에서는 다음 네 가지 모듈을 순차적으로 개발
 
 구현해야하는 모듈은
-* USERPORG
-* THREAD
-* VM
-* FILESYS
+* USERPORG : 사용자 프로그램 실행 및 시스템 콜 구현
+* THREAD : 스레드 스케줄링(context switching) 구현
+* VM : 가상 메모리 관리
+* FILESYS : 파일 시스템 기능 추가 및 관리
 
-이렇게 네개의 파트이며 순차적으로 프로젝트로 구현한다.
 
 **해당 레포는 VM까지 구현되어 있으며, 113 testcases 통과**
 
 ![image](https://github.com/user-attachments/assets/3443af03-4510-492e-a7bc-ad7fa8b03e37)
 
 ## Prj1 - UserProg 1
->ELF binary 파일을 핀토스에서 load후 user mode로 실행이 가능하도록 한다.
 
-해당 구현이 가능하기 위해 아래의 구현순서로 개발한다.
+>ELF 바이너리 파일을 Pintos에서 로드한 뒤, 유저 모드에서 실행할 수 있도록 기능을 구현한다
 
-1. Arguemnt Passing
-2. Memory Access Validation
-3. System call
+### 주요 과제
 
-### Arguemnt Passing
-pintos가 부팅되고 옵션을 통해 ELF binary file을 copy하여 실행을 하도록 한다.
+#### Arguemnt Passing
 
-이때, command line에는 실행할 파일과 arguments들을 넘겨주는데, 이때, file_name과 arguments들을 분리하여 load시에 stack에 넘겨준다.
-[commit](https://github.com/ljy2855/pintos/commit/1ef9f05e094f757e013ed3bf1edf5c2fdbabaec5)
+- ELF 바이너리 파일을 로드하고 실행 시, 커맨드 라인에서 전달된 arguments를 스택에 올리는 기능을 구현한다.
 
-### Memory Access Validation
-user mode로 실행되고 있는 process는 virtual address로 여러 process가 모든 memory 영역을 사용하는 것처럼 virtualize를 진행한다.
+#### Memory Access Validation
 
-프로세스가 virtual address상 kernel 영역에 접근을 막고, physical address로 mapping이 되지 않은 invalid한 access에 대한 접근을 막도록 구현한다. 
+- 유저 프로세스가 커널 메모리 영역에 접근하지 못하도록 제한하며, 올바른 물리 메모리 매핑을 보장한다.
+- 구현 시 threads/vaddr.h, userprog/pagedir.h 참고
 
-구현은 'threads/vaddr.h' , 'userprog/pagedir.h'을 참고한다.
+#### System call
 
-### System Call
-user mode에서 실행하는 system call은 stack에 arguments들을 쌓고 interrupt을 발생시킨다.
+- 시스템 콜 구현을 확장하여 사용자 모드에서 실행되는 프로그램이 커널 기능을 활용할 수 있도록 한다.
+- 시스템 콜 번호에 따라 적절한 기능을 수행하고, 결과 값을 반환하는 구조를 완성한다.
 
-현재 process의 context를 intr_frame에 담아 kernel모드로 전환 후, syscall_handler를 호출한다. 기존 스켈레톤 코드에는 전 과정까지가 구현되어 있고 우리는 이후의 과정만 구현을 완료하면 된다.
-
-syscall_handler 내부에서 stack의 esp로부터 argument들을 확인 후 system call number에 해당하는 구현을 완료후 return 값을 eax에 담아 user mode로 전환한다.
-
-[prj1 submit](https://github.com/ljy2855/pintos/tree/0eef4d67e9ce0dd48ff9d7ef67910fe01e64d574)
 
 ## Prj2 - Thread 
+>스레드 스케줄링과 동기화, 우선순위 기법 등을 구현하면서 스레드 관리 전반을 다룬다.
+
+### 주요 과제
+
+####  Alarm Clock 구현
+
+- busy waiting 상태의 timer_sleep을 yield를 통해 block 시키고, 일정 시간 이후 wake하도록 한다. 
+
+#### 우선순위 스케줄링
+
+- 기본 라운드 로빈(Round Robin) 스케줄링을 우선순위를 기반으로한 스케줄링으로 변경
+
+#### BSD 스케줄링
+
+- 단일 queue 기반 스케줄링에서 MLFQ 기반 스케줄링 구현
 
 ## Prj3 - UserProg 2 
 
+>UserProg 1에서 구현한 기본 시스템 콜을 확장하고, 파일 시스템 및 프로세스 제어를 더욱 고도화한다.
+
+### 주요 과제
+
+#### 추가 System Call 구현
+
+- 파일 읽기/쓰기, 파일 디스크립터 관리, 프로세스 종료 등 구현
+- 멀티프로세스 환경에서 자원 공유·분리를 처리
+
+#### 프로세스 제어
+
+- exec & wait 시스템 콜을 통해 프로세스 생성·종료 흐름을 구현
+- 자식 프로세스의 관리와 종료 시점을 정확히 제어하여 멀티 프로세싱이 가능하도록 구현
+
+#### 예외 처리 및 테스트
+
+- 잘못된 포인터 참조, 파일 접근 오류, 중첩 프로세스 생성 등 다양한 케이스를 테스트
+
 ## Prj4 - VM 
+> 가상 메모리(Virtual Memory) 기능을 구현한다.
+
+### 주요 과제
+
+#### Demand Paging
+
+- 프로세스 실행 시 모든 데이터를 메모리에 올리는 방식이 아닌, 필요한 페이지를 동적으로 로드하는 방식 구현
+- Lazy Loading을 통해 메모리 사용량 최적화
+
+#### Stack Growth
+
+- 스택 크기가 동적으로 증가할 수 있도록 지원하며, 정해진 한계를 초과하지 않도록 관리
+
+#### Page Replacement
+
+- 메모리가 부족할 경우, 적절한 페이지 교체 정책(LRU)을 적용하여 페이지를 스왑 아웃
+- 스왑 디스크를 활용하여 페이지를 저장하고 필요 시 복구하는 기능 구현
+
+#### Memory Mapped Files
+
+- 파일을 메모리에 매핑하여 효율적인 파일 I/O 처리 지원
+- 프로세스 간 공유 메모리 기능 활용 가능
